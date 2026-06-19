@@ -5,6 +5,7 @@ import { communities, communityMembers, auditLogs } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
+import { createNotification } from "@/app/actions/notifications";
 
 interface CreateCommunityInput {
   displayName: string;
@@ -168,6 +169,16 @@ export async function toggleJoinCommunityAction(communityId: string) {
             ? `El usuario se unió a la comunidad: ${community.displayName}`
             : `El usuario solicitó unirse a la comunidad privada: ${community.displayName}`,
         });
+
+        if (status === "APPROVED") {
+          await createNotification(tx, {
+            recipientId: user.id,
+            senderId: null,
+            type: "INVITATION",
+            targetType: "COMMUNITY",
+            targetId: communityId,
+          });
+        }
       });
 
       revalidatePath("/app/explore");

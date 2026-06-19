@@ -11,7 +11,11 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "test:webhook": "tsx scripts/test-webhook.ts"
+    "test:webhook": "tsx scripts/test-webhook.ts",
+    "test:posts": "npx tsx --env-file=.env.local scripts/test-posts-flow.ts",
+    "test:comments": "npx tsx --env-file=.env.local scripts/test-comments-flow.ts",
+    "test:moderation": "npx tsx --env-file=.env.local scripts/test-moderation-flow.ts",
+    "test:notifications": "npx tsx --env-file=.env.local scripts/test-notifications-flow.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

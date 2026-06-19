@@ -5,6 +5,7 @@ import { reports, posts, comments, communityMembers, users, auditLogs, communiti
 import { eq, and, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
+import { createNotification } from "@/app/actions/notifications";
 
 const VALID_REASONS = ["SPAM", "HARASSMENT", "MISINFORMATION", "OFF_TOPIC", "ILLEGAL", "OTHER"];
 
@@ -103,6 +104,20 @@ export async function createReportAction(formData: ReportInput) {
     return { success: false, error: "Ya has reportado este contenido y tu reporte se encuentra en revisión." };
   }
 
+  // Obtener autor del post o comentario reportado
+  let contentAuthorId: string | null = null;
+  if (targetType === "POST") {
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, targetId),
+    });
+    contentAuthorId = post ? post.authorId : null;
+  } else {
+    const comment = await db.query.comments.findFirst({
+      where: eq(comments.id, targetId),
+    });
+    contentAuthorId = comment ? comment.authorId : null;
+  }
+
   try {
     const [newReport] = await poolDb.insert(reports).values({
       reporterId: user.id,
@@ -121,6 +136,17 @@ export async function createReportAction(formData: ReportInput) {
       targetId: newReport.id,
       description: `Reporte creado contra ${targetType} ${targetId}. Razón: ${reason}`,
     });
+
+    // Notificar al autor del contenido
+    if (contentAuthorId && contentAuthorId !== user.id) {
+      await createNotification(null, {
+        recipientId: contentAuthorId,
+        senderId: null, // anonymous
+        type: "MODERATION",
+        targetType,
+        targetId,
+      });
+    }
 
     return { success: true, reportId: newReport.id };
   } catch (error: any) {
@@ -310,6 +336,30 @@ export async function hideReportedContentAction(reportId: string) {
         targetId: reportId,
         description: `Reporte ${reportId} resuelto ocultando el contenido.`,
       });
+
+      // 4. Notificar al autor del contenido ocultado
+      let reportedAuthorId: string | null = null;
+      if (report.targetType === "POST") {
+        const post = await tx.query.posts.findFirst({
+          where: eq(posts.id, report.targetId),
+        });
+        reportedAuthorId = post ? post.authorId : null;
+      } else {
+        const comment = await tx.query.comments.findFirst({
+          where: eq(comments.id, report.targetId),
+        });
+        reportedAuthorId = comment ? comment.authorId : null;
+      }
+
+      if (reportedAuthorId && reportedAuthorId !== user.id) {
+        await createNotification(tx, {
+          recipientId: reportedAuthorId,
+          senderId: user.id,
+          type: "MODERATION",
+          targetType: report.targetType as "POST" | "COMMENT",
+          targetId: report.targetId,
+        });
+      }
     });
 
     if (communityId) {
@@ -363,6 +413,15 @@ export async function suspendUserAction(userId: string, reason: string) {
         targetId: userId,
         description: `Usuario ${userId} suspendido. Razón: ${reason}`,
       });
+
+      // Notificar al usuario suspendido
+      await createNotification(tx, {
+        recipientId: userId,
+        senderId: user.id,
+        type: "MODERATION",
+        targetType: "POST", // dummy target type
+        targetId: "00000000-0000-0000-0000-000000000000", // nil uuid dummy
+      });
     });
 
     revalidatePath("/app/admin");
@@ -404,6 +463,15 @@ export async function unsuspendUserAction(userId: string) {
         targetType: "USER",
         targetId: userId,
         description: `Suspensión revocada para el usuario ${userId}`,
+      });
+
+      // Notificar al usuario restaurado
+      await createNotification(tx, {
+        recipientId: userId,
+        senderId: user.id,
+        type: "MODERATION",
+        targetType: "POST", // dummy target type
+        targetId: "00000000-0000-0000-0000-000000000000", // nil uuid dummy
       });
     });
 

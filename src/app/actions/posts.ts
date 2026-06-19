@@ -5,6 +5,7 @@ import { posts, communities, communityMembers, auditLogs } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
+import { createNotification } from "@/app/actions/notifications";
 
 interface PostInput {
   communityId: string;
@@ -306,6 +307,16 @@ export async function hidePostAction(postId: string) {
         targetId: postId,
         description: `Publicación marcada como oculta por moderación: "${post.title}"`,
       });
+
+      if (post.authorId !== user.id) {
+        await createNotification(tx, {
+          recipientId: post.authorId,
+          senderId: user.id,
+          type: "MODERATION",
+          targetType: "POST",
+          targetId: postId,
+        });
+      }
     });
 
     if (community) {

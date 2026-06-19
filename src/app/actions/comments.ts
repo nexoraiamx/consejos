@@ -5,6 +5,7 @@ import { comments, posts, communities, communityMembers, auditLogs, reputationEv
 import { eq, and, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
+import { createNotification } from "@/app/actions/notifications";
 
 interface CreateCommentInput {
   postId: string;
@@ -75,6 +76,7 @@ export async function createCommentAction(formData: CreateCommentInput) {
   }
 
   // 4. Si tiene parentId, verificar comentario padre
+  let parentCommentAuthorId: string | null = null;
   if (formData.parentId) {
     const parentComment = await db.query.comments.findFirst({
       where: and(eq(comments.id, formData.parentId), isNull(comments.deletedAt)),
@@ -85,6 +87,7 @@ export async function createCommentAction(formData: CreateCommentInput) {
     if (parentComment.postId !== formData.postId) {
       return { success: false, error: "El comentario de origen pertenece a otra publicación." };
     }
+    parentCommentAuthorId = parentComment.authorId;
   }
 
   // 5. Insertar comentario y log de auditoría en una transacción atómica
@@ -109,6 +112,29 @@ export async function createCommentAction(formData: CreateCommentInput) {
         targetId: inserted.id,
         description: `Comentario creado en la publicación "${post.title}"`,
       });
+
+      // Crear notificación
+      if (formData.parentId && parentCommentAuthorId) {
+        if (parentCommentAuthorId !== user.id) {
+          await createNotification(tx, {
+            recipientId: parentCommentAuthorId,
+            senderId: user.id,
+            type: "COMMENT",
+            targetType: "COMMENT",
+            targetId: inserted.id,
+          });
+        }
+      } else {
+        if (post.authorId !== user.id) {
+          await createNotification(tx, {
+            recipientId: post.authorId,
+            senderId: user.id,
+            type: "COMMENT",
+            targetType: "POST",
+            targetId: inserted.id,
+          });
+        }
+      }
 
       return inserted;
     });
@@ -528,6 +554,17 @@ export async function acceptAnswerAction(postId: string, commentId: string) {
           targetId: postId,
           description: `Respuesta marcada como aceptada: Comentario ${commentId}`,
         });
+
+        // Notificar al autor del comentario
+        if (comment.authorId !== user.id) {
+          await createNotification(tx, {
+            recipientId: comment.authorId,
+            senderId: user.id,
+            type: "REACTION",
+            targetType: "COMMENT",
+            targetId: commentId,
+          });
+        }
       }
     });
 

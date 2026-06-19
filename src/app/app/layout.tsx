@@ -6,6 +6,7 @@ import { UserButton, SignOutButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getUserRoleAction } from "@/app/actions/users";
+import { getUnreadNotificationsCountAction } from "@/app/actions/notifications";
 
 export default function PlatformLayout({
   children,
@@ -14,8 +15,8 @@ export default function PlatformLayout({
 }>) {
   const pathname = usePathname();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
   const [isAdmin, setIsAdmin] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     getUserRoleAction().then((res) => {
@@ -24,6 +25,12 @@ export default function PlatformLayout({
       }
     });
   }, []);
+
+  useEffect(() => {
+    getUnreadNotificationsCountAction().then((count) => {
+      setUnreadCount(count);
+    });
+  }, [pathname]);
 
   const navigation = [
     { name: "Feed", href: "/app", icon: Home },
@@ -75,7 +82,12 @@ export default function PlatformLayout({
                       active ? "text-white" : "text-neutral-500 group-hover:text-neutral-300"
                     }`}
                   />
-                  {item.name}
+                  <span className="flex-1 text-left">{item.name}</span>
+                  {item.name === "Notificaciones" && unreadCount > 0 && (
+                    <span className="ml-2 px-2 py-0.5 text-[10px] font-bold bg-red-500 text-white rounded-full leading-none">
+                      {unreadCount}
+                    </span>
+                  )}
                 </Link>
               );
             })}
@@ -142,11 +154,16 @@ export default function PlatformLayout({
               <Link
                 key={item.name}
                 href={item.href}
-                className={`flex flex-col items-center gap-1 p-2 transition-all duration-200 ${
+                className={`flex flex-col items-center gap-1 p-2 transition-all duration-200 relative ${
                   active ? "text-white scale-105" : "text-neutral-500"
                 }`}
               >
-                <item.icon className="h-5 w-5" />
+                <div className="relative">
+                  <item.icon className="h-5 w-5" />
+                  {item.name === "Notificaciones" && unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 h-2 w-2 bg-red-500 rounded-full" />
+                  )}
+                </div>
                 <span className="text-[9px] font-medium tracking-wide">{item.name}</span>
               </Link>
             );
