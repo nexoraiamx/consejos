@@ -6,36 +6,6 @@ import { eq, and, inArray } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 
-interface CreateNotificationInput {
-  recipientId: string;
-  senderId: string | null;
-  type: "COMMENT" | "MENTION" | "REACTION" | "INVITATION" | "MODERATION";
-  targetType: "POST" | "COMMENT" | "COMMUNITY";
-  targetId: string;
-}
-
-/**
- * Helper interno para crear una notificación.
- * Puede ejecutarse dentro de una transacción pasando el cliente 'tx'.
- */
-export async function createNotification(
-  tx: any,
-  data: CreateNotificationInput
-) {
-  const client = tx || poolDb;
-  const [newNotif] = await client
-    .insert(notifications)
-    .values({
-      recipientId: data.recipientId,
-      senderId: data.senderId,
-      type: data.type,
-      targetType: data.targetType,
-      targetId: data.targetId,
-      isRead: false,
-    })
-    .returning();
-  return newNotif;
-}
 
 /**
  * Marca una notificación como leída.

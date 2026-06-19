@@ -5,7 +5,7 @@ import { comments, posts, communities, communityMembers, auditLogs, reputationEv
 import { eq, and, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
-import { createNotification } from "@/app/actions/notifications";
+import { createNotificationTx } from "@/lib/notifications";
 
 interface CreateCommentInput {
   postId: string;
@@ -116,7 +116,7 @@ export async function createCommentAction(formData: CreateCommentInput) {
       // Crear notificación
       if (formData.parentId && parentCommentAuthorId) {
         if (parentCommentAuthorId !== user.id) {
-          await createNotification(tx, {
+          await createNotificationTx(tx, {
             recipientId: parentCommentAuthorId,
             senderId: user.id,
             type: "COMMENT",
@@ -126,7 +126,7 @@ export async function createCommentAction(formData: CreateCommentInput) {
         }
       } else {
         if (post.authorId !== user.id) {
-          await createNotification(tx, {
+          await createNotificationTx(tx, {
             recipientId: post.authorId,
             senderId: user.id,
             type: "COMMENT",
@@ -557,7 +557,7 @@ export async function acceptAnswerAction(postId: string, commentId: string) {
 
         // Notificar al autor del comentario
         if (comment.authorId !== user.id) {
-          await createNotification(tx, {
+          await createNotificationTx(tx, {
             recipientId: comment.authorId,
             senderId: user.id,
             type: "REACTION",

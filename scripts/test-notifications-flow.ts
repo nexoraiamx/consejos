@@ -11,7 +11,8 @@ import {
   userReputation 
 } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
-import { createNotification } from "@/app/actions/notifications";
+import { createNotificationTx } from "@/lib/notifications";
+import { SYSTEM_TARGET_ID } from "@/lib/constants";
 
 async function testNotificationsFlow() {
   console.log("Iniciando pruebas de flujo para Notificaciones...");
@@ -21,7 +22,6 @@ async function testNotificationsFlow() {
   const userIdModerator = "user_notif_moderator";
 
   const communitySlug = "notif-flow-test-community";
-  const nilUuid = "00000000-0000-0000-0000-000000000000";
 
   try {
     // 1. Limpieza de datos residuales
@@ -96,9 +96,8 @@ async function testNotificationsFlow() {
       status: "ACTIVE",
     }).returning();
 
-    // Simular creación de notificación
     await poolDb.transaction(async (tx) => {
-      await createNotification(tx, {
+      await createNotificationTx(tx, {
         recipientId: post.authorId,
         senderId: userIdCommenter,
         type: "COMMENT",
@@ -128,7 +127,7 @@ async function testNotificationsFlow() {
     }).returning();
 
     await poolDb.transaction(async (tx) => {
-      await createNotification(tx, {
+      await createNotificationTx(tx, {
         recipientId: comment.authorId,
         senderId: userIdPostAuthor,
         type: "COMMENT",
@@ -151,7 +150,7 @@ async function testNotificationsFlow() {
     console.log("\n--- Prueba 3: Aceptar respuesta genera notificación ---");
     await db.update(posts).set({ acceptedAnswerId: comment.id }).where(eq(posts.id, post.id));
     await poolDb.transaction(async (tx) => {
-      await createNotification(tx, {
+      await createNotificationTx(tx, {
         recipientId: comment.authorId,
         senderId: userIdPostAuthor,
         type: "REACTION",
@@ -175,7 +174,7 @@ async function testNotificationsFlow() {
     console.log("\n--- Prueba 4: Ocultar contenido por moderación genera notificación ---");
     await db.update(comments).set({ status: "HIDDEN" }).where(eq(comments.id, comment.id));
     await poolDb.transaction(async (tx) => {
-      await createNotification(tx, {
+      await createNotificationTx(tx, {
         recipientId: comment.authorId,
         senderId: userIdModerator,
         type: "MODERATION",
@@ -200,12 +199,12 @@ async function testNotificationsFlow() {
     console.log("\n--- Prueba 5: Suspender usuario genera notificación ---");
     await db.update(users).set({ isSuspended: true }).where(eq(users.id, userIdCommenter));
     await poolDb.transaction(async (tx) => {
-      await createNotification(tx, {
+      await createNotificationTx(tx, {
         recipientId: userIdCommenter,
         senderId: userIdModerator,
         type: "MODERATION",
         targetType: "POST",
-        targetId: nilUuid,
+        targetId: SYSTEM_TARGET_ID,
       });
     });
 
@@ -213,7 +212,7 @@ async function testNotificationsFlow() {
       where: and(
         eq(notifications.recipientId, userIdCommenter),
         eq(notifications.type, "MODERATION"),
-        eq(notifications.targetId, nilUuid)
+        eq(notifications.targetId, SYSTEM_TARGET_ID)
       ),
     });
     if (notifsAfterSuspend.length !== 1) {

@@ -5,7 +5,7 @@ import { posts, communities, communityMembers, auditLogs } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
-import { createNotification } from "@/app/actions/notifications";
+import { createNotificationTx } from "@/lib/notifications";
 
 interface PostInput {
   communityId: string;
@@ -309,7 +309,7 @@ export async function hidePostAction(postId: string) {
       });
 
       if (post.authorId !== user.id) {
-        await createNotification(tx, {
+        await createNotificationTx(tx, {
           recipientId: post.authorId,
           senderId: user.id,
           type: "MODERATION",

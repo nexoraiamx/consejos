@@ -22,6 +22,7 @@ import {
 } from "@/app/actions/notifications";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { SYSTEM_TARGET_ID } from "@/lib/constants";
 
 interface NotificationItem {
   id: string;
@@ -181,7 +182,7 @@ export default function NotificationsClient({ initialNotifications }: Notificati
         );
       case "MODERATION":
         // Check reported, hidden, or suspended
-        if (not.targetId === "00000000-0000-0000-0000-000000000000") {
+        if (not.targetId === SYSTEM_TARGET_ID) {
           // Account status notification (dummy nil UUID)
           return (
             <>

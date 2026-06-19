@@ -5,7 +5,7 @@ import { communities, communityMembers, auditLogs } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
-import { createNotification } from "@/app/actions/notifications";
+import { createNotificationTx } from "@/lib/notifications";
 
 interface CreateCommunityInput {
   displayName: string;
@@ -171,7 +171,7 @@ export async function toggleJoinCommunityAction(communityId: string) {
         });
 
         if (status === "APPROVED") {
-          await createNotification(tx, {
+          await createNotificationTx(tx, {
             recipientId: user.id,
             senderId: null,
             type: "INVITATION",

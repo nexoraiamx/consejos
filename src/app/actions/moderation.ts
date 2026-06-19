@@ -5,7 +5,8 @@ import { reports, posts, comments, communityMembers, users, auditLogs, communiti
 import { eq, and, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
-import { createNotification } from "@/app/actions/notifications";
+import { createNotification, createNotificationTx } from "@/lib/notifications";
+import { SYSTEM_TARGET_ID } from "@/lib/constants";
 
 const VALID_REASONS = ["SPAM", "HARASSMENT", "MISINFORMATION", "OFF_TOPIC", "ILLEGAL", "OTHER"];
 
@@ -139,7 +140,7 @@ export async function createReportAction(formData: ReportInput) {
 
     // Notificar al autor del contenido
     if (contentAuthorId && contentAuthorId !== user.id) {
-      await createNotification(null, {
+      await createNotification({
         recipientId: contentAuthorId,
         senderId: null, // anonymous
         type: "MODERATION",
@@ -352,7 +353,7 @@ export async function hideReportedContentAction(reportId: string) {
       }
 
       if (reportedAuthorId && reportedAuthorId !== user.id) {
-        await createNotification(tx, {
+        await createNotificationTx(tx, {
           recipientId: reportedAuthorId,
           senderId: user.id,
           type: "MODERATION",
@@ -415,12 +416,12 @@ export async function suspendUserAction(userId: string, reason: string) {
       });
 
       // Notificar al usuario suspendido
-      await createNotification(tx, {
+      await createNotificationTx(tx, {
         recipientId: userId,
         senderId: user.id,
         type: "MODERATION",
         targetType: "POST", // dummy target type
-        targetId: "00000000-0000-0000-0000-000000000000", // nil uuid dummy
+        targetId: SYSTEM_TARGET_ID,
       });
     });
 
@@ -466,12 +467,12 @@ export async function unsuspendUserAction(userId: string) {
       });
 
       // Notificar al usuario restaurado
-      await createNotification(tx, {
+      await createNotificationTx(tx, {
         recipientId: userId,
         senderId: user.id,
         type: "MODERATION",
         targetType: "POST", // dummy target type
-        targetId: "00000000-0000-0000-0000-000000000000", // nil uuid dummy
+        targetId: SYSTEM_TARGET_ID,
       });
     });
 
