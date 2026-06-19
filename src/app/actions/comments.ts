@@ -1,16 +1,18 @@
 "use server";
 
 import { db, poolDb } from "@/db";
-import { comments, posts, communities, communityMembers, auditLogs, reputationEvents } from "@/db/schema";
+import { comments, posts, communities, communityMembers, auditLogs, reputationEvents, attachments } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { createNotificationTx } from "@/lib/notifications";
+import { AttachmentInput } from "./posts";
 
 interface CreateCommentInput {
   postId: string;
   content: string;
   parentId?: string;
+  attachments?: AttachmentInput[];
 }
 
 /**
@@ -104,6 +106,22 @@ export async function createCommentAction(formData: CreateCommentInput) {
         content,
         status: "ACTIVE",
       }).returning();
+
+      // Guardar metadata de adjuntos
+      if (formData.attachments && formData.attachments.length > 0) {
+        await tx.insert(attachments).values(
+          formData.attachments.map((att) => ({
+            uploaderId: user.id,
+            targetType: "COMMENT",
+            targetId: inserted.id,
+            fileUrl: att.fileUrl,
+            fileKey: att.fileKey,
+            fileName: att.fileName,
+            fileSize: att.fileSize,
+            mimeType: att.mimeType,
+          }))
+        );
+      }
 
       await tx.insert(auditLogs).values({
         actorId: user.id,

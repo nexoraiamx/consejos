@@ -2,9 +2,10 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createPostAction } from "@/app/actions/posts";
+import { createPostAction, AttachmentInput } from "@/app/actions/posts";
 import { ArrowLeft, FileQuestion, BookOpen, MessageCircle, FileCode, Loader2, Save } from "lucide-react";
 import Link from "next/link";
+import { Uploader } from "@/components/shared/uploader";
 
 interface PostFormProps {
   communityId: string;
@@ -23,6 +24,7 @@ export default function PostFormClient({
   const [postType, setPostType] = useState<"QUESTION" | "RESOURCE" | "DISCUSSION" | "CASE_STUDY">("DISCUSSION");
   const [category, setCategory] = useState("");
   const [tagsString, setTagsString] = useState("");
+  const [attachments, setAttachments] = useState<AttachmentInput[]>([]);
   
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -47,6 +49,7 @@ export default function PostFormClient({
         postType,
         category: category || undefined,
         tags,
+        attachments,
       });
 
       if (res.success) {
@@ -222,6 +225,17 @@ export default function PostFormClient({
             onChange={(e) => setContent(e.target.value)}
             rows={10}
             className="px-4 py-3 bg-neutral-900 border border-neutral-850 rounded-2xl text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-neutral-700 transition-colors font-light resize-none leading-relaxed font-mono"
+          />
+        </div>
+
+        {/* Adjuntos y Multimedia */}
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-semibold text-neutral-300">Multimedia y Enlaces Externos</label>
+          <Uploader
+            communityId={communityId}
+            targetType="POST"
+            value={attachments}
+            onChange={setAttachments}
           />
         </div>
 

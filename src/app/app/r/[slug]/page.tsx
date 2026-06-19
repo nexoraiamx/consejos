@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { communities, communityMembers, profiles, posts, userReputation } from "@/db/schema";
-import { eq, and, isNull, sql, desc } from "drizzle-orm";
+import { communities, communityMembers, profiles, posts, userReputation, attachments } from "@/db/schema";
+import { eq, and, isNull, sql, desc, inArray } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { ArrowLeft, Inbox, Globe, Lock, ShieldAlert, Calendar, User, EyeOff, Shield, Plus } from "lucide-react";
 import Link from "next/link";
@@ -127,6 +127,20 @@ export default async function CommunityDetailPage({ params }: Props) {
     .leftJoin(userReputation, eq(userReputation.userId, posts.authorId))
     .where(and(...postConditions))
     .orderBy(desc(posts.createdAt));
+
+  // Obtener adjuntos para los posts del feed
+  const postIds = dbPosts.map((p) => p.id);
+  const feedAttachments = postIds.length > 0
+    ? await db
+        .select()
+        .from(attachments)
+        .where(
+          and(
+            eq(attachments.targetType, "POST"),
+            inArray(attachments.targetId, postIds)
+          )
+        )
+    : [];
 
   const getPrivacyIcon = () => {
     switch (community.privacyType) {
@@ -266,29 +280,35 @@ export default async function CommunityDetailPage({ params }: Props) {
               </div>
             ) : (
               <div className="space-y-6">
-                {dbPosts.map((post) => (
-                  <PostCard
-                    key={post.id}
-                    id={post.id}
-                    title={post.title}
-                    content={post.content}
-                    communitySlug={community.slug}
-                    communityName={community.displayName}
-                    authorId={post.authorId}
-                    authorName={post.authorName}
-                    authorAvatar={post.authorAvatar || undefined}
-                    authorReputation={post.authorReputation || 0}
-                    category={post.category || undefined}
-                    tags={post.tags}
-                    createdAt={timeAgo(post.createdAt)}
-                    upvotesCount={0}
-                    commentsCount={0}
-                    postType={post.postType as any}
-                    status={post.status as any}
-                    currentUserId={currentUser?.id}
-                    canModerate={canModerate}
-                  />
-                ))}
+                {dbPosts.map((post) => {
+                  const postAttachments = feedAttachments.filter(
+                    (att) => att.targetId === post.id
+                  );
+                  return (
+                    <PostCard
+                      key={post.id}
+                      id={post.id}
+                      title={post.title}
+                      content={post.content}
+                      communitySlug={community.slug}
+                      communityName={community.displayName}
+                      authorId={post.authorId}
+                      authorName={post.authorName}
+                      authorAvatar={post.authorAvatar || undefined}
+                      authorReputation={post.authorReputation || 0}
+                      category={post.category || undefined}
+                      tags={post.tags}
+                      createdAt={timeAgo(post.createdAt)}
+                      upvotesCount={0}
+                      commentsCount={0}
+                      postType={post.postType as any}
+                      status={post.status as any}
+                      currentUserId={currentUser?.id}
+                      canModerate={canModerate}
+                      attachments={postAttachments}
+                    />
+                  );
+                })}
               </div>
             )}
           </div>

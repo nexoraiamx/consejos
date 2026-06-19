@@ -1,8 +1,9 @@
 import { db } from "@/db";
-import { posts, communities, communityMembers, profiles, userReputation, comments } from "@/db/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { posts, communities, communityMembers, profiles, userReputation, comments, attachments } from "@/db/schema";
+import { eq, and, isNull, inArray } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { CommentSection } from "@/components/shared/comment-section";
+import { MediaPreview } from "@/components/shared/media-preview";
 import { redirect, notFound } from "next/navigation";
 import { 
   ArrowLeft, 
@@ -145,6 +146,31 @@ export default async function PostDetailPage({ params }: Props) {
     )
     .orderBy(comments.createdAt);
 
+  // Obtener adjuntos para el post
+  const postAttachments = await db
+    .select()
+    .from(attachments)
+    .where(
+      and(
+        eq(attachments.targetType, "POST"),
+        eq(attachments.targetId, postId)
+      )
+    );
+
+  // Obtener adjuntos para los comentarios
+  const commentIds = dbComments.map((c) => c.id);
+  const commentAttachmentsResult = commentIds.length > 0
+    ? await db
+        .select()
+        .from(attachments)
+        .where(
+          and(
+            eq(attachments.targetType, "COMMENT"),
+            inArray(attachments.targetId, commentIds)
+          )
+        )
+    : [];
+
   // Calcular si el usuario actual es moderador o administrador local
   let canModerate = isGlobalAdmin;
   if (currentUser && !isGlobalAdmin) {
@@ -174,6 +200,16 @@ export default async function PostDetailPage({ params }: Props) {
     authorName: c.authorName,
     authorAvatar: c.authorAvatar || undefined,
     authorReputation: c.authorReputation || 0,
+    attachments: commentAttachmentsResult
+      .filter((att) => att.targetId === c.id)
+      .map((att) => ({
+        id: att.id,
+        fileName: att.fileName,
+        mimeType: att.mimeType,
+        fileUrl: att.fileUrl,
+        fileSize: att.fileSize,
+        fileKey: att.fileKey,
+      })),
   }));
 
   const getTypeBadge = () => {
@@ -265,6 +301,13 @@ export default async function PostDetailPage({ params }: Props) {
               {postResult.content}
             </div>
 
+            {/* Adjuntos del Post */}
+            {postAttachments.length > 0 && (
+              <div className="mt-2">
+                <MediaPreview attachments={postAttachments} />
+              </div>
+            )}
+
             {/* Tags */}
             {postResult.tags.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-neutral-900/60">
@@ -284,6 +327,7 @@ export default async function PostDetailPage({ params }: Props) {
           <CommentSection
             postId={postResult.id}
             postAuthorId={postResult.authorId}
+            communityId={community.id}
             initialComments={formattedComments}
             currentUserId={currentUser?.id}
             canModerate={canModerate}

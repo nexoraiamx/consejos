@@ -16,6 +16,9 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ReportModal } from "./report-modal";
+import { MediaPreview } from "./media-preview";
+import { Uploader } from "./uploader";
+import { AttachmentInput } from "@/app/actions/posts";
 
 export interface CommentCardProps {
   id: string;
@@ -32,12 +35,14 @@ export interface CommentCardProps {
   canModerate?: boolean;
   isPostAuthor?: boolean;
   isAccepted?: boolean;
+  attachments?: any[];
+  communityId: string;
   replies?: CommentCardProps[];
   onAcceptAnswer?: (commentId: string) => Promise<void>;
   onEditComment?: (commentId: string, newContent: string) => Promise<void>;
   onDeleteComment?: (commentId: string) => Promise<void>;
   onHideToggleComment?: (commentId: string, hide: boolean) => Promise<void>;
-  onReplyComment?: (parentId: string, content: string) => Promise<void>;
+  onReplyComment?: (parentId: string, content: string, attachments: AttachmentInput[]) => Promise<void>;
 }
 
 export function CommentCard({
@@ -55,6 +60,8 @@ export function CommentCard({
   canModerate = false,
   isPostAuthor = false,
   isAccepted = false,
+  attachments = [],
+  communityId,
   replies = [],
   onAcceptAnswer,
   onEditComment,
@@ -64,6 +71,7 @@ export function CommentCard({
 }: CommentCardProps) {
   const [showReplyForm, setShowReplyForm] = useState(false);
   const [replyText, setReplyText] = useState("");
+  const [replyAttachments, setReplyAttachments] = useState<AttachmentInput[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(content);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -76,8 +84,9 @@ export function CommentCard({
     if (!replyText.trim() || !onReplyComment) return;
     setIsSubmitting(true);
     try {
-      await onReplyComment(id, replyText);
+      await onReplyComment(id, replyText, replyAttachments);
       setReplyText("");
+      setReplyAttachments([]);
       setShowReplyForm(false);
     } catch (err) {
       console.error(err);
@@ -283,9 +292,14 @@ export function CommentCard({
             </div>
           </div>
         ) : (
-          <p className="text-xs sm:text-sm text-neutral-300 font-light leading-relaxed whitespace-pre-wrap">
-            {content}
-          </p>
+          <div className="flex flex-col gap-2">
+            <p className="text-xs sm:text-sm text-neutral-300 font-light leading-relaxed whitespace-pre-wrap">
+              {content}
+            </p>
+            {attachments && attachments.length > 0 && (
+              <MediaPreview attachments={attachments} />
+            )}
+          </div>
         )}
       </div>
 
@@ -315,9 +329,18 @@ export function CommentCard({
               value={replyText}
               onChange={(e) => setReplyText(e.target.value)}
               placeholder={`Responder a ${authorName}...`}
-              className="w-full max-w-xl min-h-[60px] p-3 text-xs bg-neutral-905 border border-neutral-850 rounded-2xl text-white placeholder-neutral-550 focus:outline-none focus:border-neutral-750 resize-none font-light leading-relaxed"
+              className="w-full max-w-xl min-h-[60px] p-3 text-xs bg-neutral-905 border border-neutral-850 rounded-2xl text-white placeholder-neutral-555 focus:outline-none focus:border-neutral-750 resize-none font-light leading-relaxed"
             />
-            <div className="flex gap-1.5">
+            {/* Uploader para adjuntos en respuestas */}
+            <div className="max-w-xl mt-1">
+              <Uploader
+                communityId={communityId}
+                targetType="COMMENT"
+                value={replyAttachments}
+                onChange={setReplyAttachments}
+              />
+            </div>
+            <div className="flex gap-1.5 mt-1">
               <button
                 onClick={handleReplySubmit}
                 disabled={isSubmitting || !replyText.trim()}
@@ -344,6 +367,7 @@ export function CommentCard({
             <CommentCard
               key={reply.id}
               {...reply}
+              communityId={communityId}
               currentUserId={currentUserId}
               canModerate={canModerate}
               isPostAuthor={isPostAuthor}

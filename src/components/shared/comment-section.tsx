@@ -3,6 +3,8 @@
 import React, { useState, useTransition } from "react";
 import { MessageSquare, AlertCircle } from "lucide-react";
 import { CommentCard } from "./comment-card";
+import { Uploader } from "./uploader";
+import { AttachmentInput } from "@/app/actions/posts";
 import { 
   createCommentAction, 
   updateCommentAction, 
@@ -23,11 +25,13 @@ interface DBComment {
   content: string;
   status: "ACTIVE" | "HIDDEN" | "DELETED";
   createdAt: string;
+  attachments?: any[];
 }
 
 interface CommentSectionProps {
   postId: string;
   postAuthorId: string;
+  communityId: string;
   initialComments: DBComment[];
   currentUserId?: string;
   currentUserRole?: string;
@@ -41,6 +45,7 @@ interface CommentSectionProps {
 export function CommentSection({
   postId,
   postAuthorId,
+  communityId,
   initialComments,
   currentUserId,
   canModerate = false,
@@ -52,6 +57,7 @@ export function CommentSection({
   const [commentsList, setCommentsList] = useState<DBComment[]>(initialComments);
   const [acceptedAnswerId, setAcceptedAnswerId] = useState<string | null>(initialAcceptedAnswerId);
   const [rootCommentText, setRootCommentText] = useState("");
+  const [rootAttachments, setRootAttachments] = useState<AttachmentInput[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -90,6 +96,7 @@ export function CommentSection({
         const res = await createCommentAction({
           postId,
           content: rootCommentText,
+          attachments: rootAttachments,
         });
 
         if (res.success && res.commentId) {
@@ -105,9 +112,11 @@ export function CommentSection({
             content: rootCommentText,
             status: "ACTIVE",
             createdAt: now.toLocaleDateString() + " " + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            attachments: rootAttachments,
           };
           setCommentsList((prev) => [...prev, newComment]);
           setRootCommentText("");
+          setRootAttachments([]);
         } else {
           setErrorMsg(res.error || "No se pudo publicar el comentario.");
         }
@@ -117,13 +126,14 @@ export function CommentSection({
     });
   };
 
-  const handleReplyComment = async (parentId: string, replyText: string) => {
+  const handleReplyComment = async (parentId: string, replyText: string, replyAttachments: AttachmentInput[]) => {
     setErrorMsg(null);
     try {
       const res = await createCommentAction({
         postId,
         content: replyText,
         parentId,
+        attachments: replyAttachments,
       });
 
       if (res.success && res.commentId) {
@@ -138,6 +148,7 @@ export function CommentSection({
           content: replyText,
           status: "ACTIVE",
           createdAt: now.toLocaleDateString() + " " + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          attachments: replyAttachments,
         };
         setCommentsList((prev) => [...prev, newReply]);
       } else {
@@ -259,7 +270,13 @@ export function CommentSection({
                 value={rootCommentText}
                 onChange={(e) => setRootCommentText(e.target.value)}
                 placeholder="Comparte tu opinión experta o aporta al debate..."
-                className="w-full min-h-[90px] p-4 text-xs sm:text-sm bg-neutral-955 border border-neutral-900 rounded-2xl text-white placeholder-neutral-500 focus:outline-none focus:border-neutral-800 focus:ring-0 resize-none font-light leading-relaxed transition-colors duration-300"
+                className="w-full min-h-[90px] p-4 text-xs sm:text-sm bg-neutral-955 border border-neutral-900 rounded-2xl text-white placeholder-neutral-550 focus:outline-none focus:border-neutral-800 focus:ring-0 resize-none font-light leading-relaxed transition-colors duration-300"
+              />
+              <Uploader
+                communityId={communityId}
+                targetType="COMMENT"
+                value={rootAttachments}
+                onChange={setRootAttachments}
               />
               <button
                 onClick={handlePostRootComment}
@@ -290,6 +307,7 @@ export function CommentSection({
             <CommentCard
               key={comment.id}
               {...comment}
+              communityId={communityId}
               currentUserId={currentUserId}
               canModerate={canModerate}
               isPostAuthor={isPostAuthor}

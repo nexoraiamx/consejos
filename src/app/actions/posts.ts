@@ -1,11 +1,19 @@
 "use server";
 
 import { db, poolDb } from "@/db";
-import { posts, communities, communityMembers, auditLogs } from "@/db/schema";
+import { posts, communities, communityMembers, auditLogs, attachments } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { createNotificationTx } from "@/lib/notifications";
+
+export interface AttachmentInput {
+  fileUrl: string;
+  fileKey: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+}
 
 interface PostInput {
   communityId: string;
@@ -14,6 +22,7 @@ interface PostInput {
   postType: "QUESTION" | "RESOURCE" | "DISCUSSION" | "CASE_STUDY";
   category?: string;
   tags?: string[];
+  attachments?: AttachmentInput[];
 }
 
 /**
@@ -86,6 +95,22 @@ export async function createPostAction(formData: PostInput) {
         tags,
         status: "ACTIVE",
       }).returning();
+
+      // Guardar metadata de adjuntos
+      if (formData.attachments && formData.attachments.length > 0) {
+        await tx.insert(attachments).values(
+          formData.attachments.map((att) => ({
+            uploaderId: user.id,
+            targetType: "POST",
+            targetId: insertedPost.id,
+            fileUrl: att.fileUrl,
+            fileKey: att.fileKey,
+            fileName: att.fileName,
+            fileSize: att.fileSize,
+            mimeType: att.mimeType,
+          }))
+        );
+      }
 
       // Log de auditoría
       await tx.insert(auditLogs).values({

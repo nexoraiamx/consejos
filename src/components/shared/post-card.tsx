@@ -23,6 +23,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { softDeletePostAction, hidePostAction, unhidePostAction } from "@/app/actions/posts";
 import Link from "next/link";
 import { ReportModal } from "./report-modal";
+import { MediaPreview } from "./media-preview";
 
 interface Attachment {
   id: string;
@@ -326,6 +327,11 @@ export function PostCard({
           {content}
         </p>
       </Link>
+
+      {/* Media Previews */}
+      {attachments && attachments.length > 0 && (
+        <MediaPreview attachments={attachments} />
+      )}
 
       {/* Tags List */}
       {tags.length > 0 && (
