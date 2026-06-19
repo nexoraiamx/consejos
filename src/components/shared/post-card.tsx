@@ -19,7 +19,7 @@ import {
   Award
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { softDeletePostAction, toggleHidePostAction } from "@/app/actions/posts";
+import { softDeletePostAction, hidePostAction, unhidePostAction } from "@/app/actions/posts";
 import Link from "next/link";
 
 interface Attachment {
@@ -115,7 +115,8 @@ export function PostCard({
 
   const handleToggleHide = async () => {
     try {
-      const res = await toggleHidePostAction(id);
+      const action = status === "HIDDEN" ? unhidePostAction : hidePostAction;
+      const res = await action(id);
       if (res.success) {
         setStatus(res.status as any);
       } else {
@@ -123,7 +124,7 @@ export function PostCard({
       }
     } catch (err) {
       console.error(err);
-      alert("Error al ocultar.");
+      alert("Error al cambiar el estado de visibilidad.");
     } finally {
       setMenuOpen(false);
     }

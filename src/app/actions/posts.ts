@@ -241,9 +241,9 @@ export async function softDeletePostAction(postId: string) {
 }
 
 /**
- * Server Action para ocultar/mostrar (moderación) un post de cualquier usuario.
+ * Server Action para ocultar (moderación) un post de cualquier usuario.
  */
-export async function toggleHidePostAction(postId: string) {
+export async function hidePostAction(postId: string) {
   const user = await requireAuth();
 
   const post = await db.query.posts.findFirst({
@@ -285,7 +285,6 @@ export async function toggleHidePostAction(postId: string) {
     };
   }
 
-  const newStatus = post.status === "HIDDEN" ? "ACTIVE" : "HIDDEN";
   const community = await db.query.communities.findFirst({
     where: eq(communities.id, post.communityId),
   });
@@ -293,18 +292,16 @@ export async function toggleHidePostAction(postId: string) {
   try {
     await db.transaction(async (tx) => {
       await tx.update(posts).set({
-        status: newStatus,
+        status: "HIDDEN",
         updatedAt: new Date(),
       }).where(eq(posts.id, postId));
 
       await tx.insert(auditLogs).values({
         actorId: user.id,
-        action: newStatus === "HIDDEN" ? "POST_HIDE" : "POST_UNHIDE",
+        action: "POST_HIDE",
         targetType: "POST",
         targetId: postId,
-        description: newStatus === "HIDDEN"
-          ? `Publicación marcada como oculta: "${post.title}"`
-          : `Publicación restaurada a activa: "${post.title}"`,
+        description: `Publicación marcada como oculta por moderación: "${post.title}"`,
       });
     });
 
@@ -313,9 +310,86 @@ export async function toggleHidePostAction(postId: string) {
       revalidatePath(`/app/r/${community.slug}/post/${postId}`);
     }
     revalidatePath("/app");
-    return { success: true, status: newStatus };
+    return { success: true, status: "HIDDEN" };
   } catch (error) {
-    console.error("Error al cambiar visibilidad de post:", error);
-    return { success: false, error: "Error al actualizar la visibilidad." };
+    console.error("Error al ocultar post:", error);
+    return { success: false, error: "Error al ocultar la publicación." };
+  }
+}
+
+/**
+ * Server Action para mostrar (unhide) un post ocultado por moderación.
+ */
+export async function unhidePostAction(postId: string) {
+  const user = await requireAuth();
+
+  const post = await db.query.posts.findFirst({
+    where: and(
+      eq(posts.id, postId),
+      isNull(posts.deletedAt)
+    ),
+  });
+
+  if (!post) {
+    return { success: false, error: "La publicación no existe." };
+  }
+
+  // Verificar permisos de moderación
+  const isGlobalAdmin = user.globalRole === "GLOBAL_ADMIN";
+  let isAllowed = isGlobalAdmin;
+
+  if (!isGlobalAdmin) {
+    const membership = await db.query.communityMembers.findFirst({
+      where: and(
+        eq(communityMembers.communityId, post.communityId),
+        eq(communityMembers.userId, user.id)
+      ),
+    });
+
+    if (
+      membership && 
+      (membership.role === "COMMUNITY_ADMIN" || membership.role === "MODERATOR") && 
+      membership.status === "APPROVED"
+    ) {
+      isAllowed = true;
+    }
+  }
+
+  if (!isAllowed) {
+    return {
+      success: false,
+      error: "No autorizado: Requiere privilegios de moderación o administración."
+    };
+  }
+
+  const community = await db.query.communities.findFirst({
+    where: eq(communities.id, post.communityId),
+  });
+
+  try {
+    await db.transaction(async (tx) => {
+      await tx.update(posts).set({
+        status: "ACTIVE",
+        updatedAt: new Date(),
+      }).where(eq(posts.id, postId));
+
+      await tx.insert(auditLogs).values({
+        actorId: user.id,
+        action: "POST_UNHIDE",
+        targetType: "POST",
+        targetId: postId,
+        description: `Publicación restaurada a activa por moderación: "${post.title}"`,
+      });
+    });
+
+    if (community) {
+      revalidatePath(`/app/r/${community.slug}`);
+      revalidatePath(`/app/r/${community.slug}/post/${postId}`);
+    }
+    revalidatePath("/app");
+    return { success: true, status: "ACTIVE" };
+  } catch (error) {
+    console.error("Error al mostrar post:", error);
+    return { success: false, error: "Error al mostrar la publicación." };
   }
 }
