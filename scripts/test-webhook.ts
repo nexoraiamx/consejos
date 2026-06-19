@@ -1,7 +1,7 @@
 import { Webhook } from "svix";
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
-import * as schema from "./src/db/schema";
+import * as schema from "../src/db/schema";
 import { eq } from "drizzle-orm";
 
 // 1. Load environment variables
