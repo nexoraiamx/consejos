@@ -11,9 +11,11 @@ import {
   Eye, 
   Check, 
   CheckCircle2, 
-  Award 
+  Award,
+  Flag
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ReportModal } from "./report-modal";
 
 export interface CommentCardProps {
   id: string;
@@ -65,6 +67,7 @@ export function CommentCard({
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(content);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
 
   const isAuthor = currentUserId === authorId;
   const isHidden = status === "HIDDEN";
@@ -234,6 +237,17 @@ export function CommentCard({
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             )}
+
+            {/* Reportar (para no autor) */}
+            {!isAuthor && currentUserId && (
+              <button
+                onClick={() => setReportModalOpen(true)}
+                title="Reportar comentario"
+                className="p-1 rounded-lg border border-neutral-850 text-neutral-500 hover:text-red-450 hover:bg-neutral-900 transition-all cursor-pointer font-semibold"
+              >
+                <Flag className="h-3.5 w-3.5 text-red-500/80" />
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -342,6 +356,13 @@ export function CommentCard({
           ))}
         </div>
       )}
+      {/* Report Modal */}
+      <ReportModal
+        isOpen={reportModalOpen}
+        onClose={() => setReportModalOpen(false)}
+        targetType="COMMENT"
+        targetId={id}
+      />
     </motion.div>
   );
 }

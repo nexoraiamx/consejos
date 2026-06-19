@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
-import { Home, Compass, Bell, Settings, User, LogOut, Menu, X, Command } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Home, Compass, Bell, Settings, User, LogOut, Menu, X, Command, Shield } from "lucide-react";
 import { UserButton, SignOutButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { getUserRoleAction } from "@/app/actions/users";
 
 export default function PlatformLayout({
   children,
@@ -14,11 +15,22 @@ export default function PlatformLayout({
   const pathname = usePathname();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    getUserRoleAction().then((res) => {
+      if (res?.globalRole === "GLOBAL_ADMIN") {
+        setIsAdmin(true);
+      }
+    });
+  }, []);
+
   const navigation = [
     { name: "Feed", href: "/app", icon: Home },
     { name: "Comunidades", href: "/app/explore", icon: Compass },
     { name: "Notificaciones", href: "/app/notifications", icon: Bell },
     { name: "Ajustes", href: "/app/settings", icon: Settings },
+    ...(isAdmin ? [{ name: "Admin", href: "/app/admin", icon: Shield }] : []),
   ];
 
   const isActive = (path: string) => {

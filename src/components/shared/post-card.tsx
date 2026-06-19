@@ -16,11 +16,13 @@ import {
   BookOpen,
   MessageCircle,
   FileCode,
-  Award
+  Award,
+  Flag
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { softDeletePostAction, hidePostAction, unhidePostAction } from "@/app/actions/posts";
 import Link from "next/link";
+import { ReportModal } from "./report-modal";
 
 interface Attachment {
   id: string;
@@ -79,6 +81,7 @@ export function PostCard({
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [status, setStatus] = useState<"ACTIVE" | "HIDDEN" | "DELETED">(initialStatus);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
 
   const isAuthor = currentUserId === authorId;
   const showMenu = isAuthor || canModerate;
@@ -275,6 +278,18 @@ export function PostCard({
                           </button>
                         </>
                       )}
+                      {!isAuthor && currentUserId && (
+                        <button
+                          onClick={() => {
+                            setReportModalOpen(true);
+                            setMenuOpen(false);
+                          }}
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg text-neutral-300 hover:text-white hover:bg-neutral-900 transition-colors w-full cursor-pointer"
+                        >
+                          <Flag className="h-3.5 w-3.5 text-red-400" />
+                          <span>Reportar</span>
+                        </button>
+                      )}
                       {canModerate && (
                         <button
                           onClick={handleToggleHide}
@@ -376,6 +391,13 @@ export function PostCard({
           </button>
         </div>
       </div>
+      {/* Report Modal */}
+      <ReportModal
+        isOpen={reportModalOpen}
+        onClose={() => setReportModalOpen(false)}
+        targetType="POST"
+        targetId={id}
+      />
     </motion.div>
   );
 }

@@ -343,6 +343,26 @@ export default async function CommunityDetailPage({ params }: Props) {
                 )}
               </div>
             )}
+
+            {/* Panel de Moderación para Admins/Mods */}
+            {canModerate && (
+              <div className="p-6 rounded-3xl border border-neutral-900 bg-neutral-950/40 backdrop-blur-md flex flex-col gap-3">
+                <h3 className="text-xs font-semibold text-neutral-400 tracking-wider uppercase border-b border-neutral-900 pb-3 flex items-center gap-1.5">
+                  <Shield className="h-4 w-4 text-blue-500" />
+                  <span>Herramientas de Moderación</span>
+                </h3>
+                <p className="text-[11px] text-neutral-500 font-light leading-relaxed">
+                  Tienes privilegios de moderación en este espacio. Puedes resolver reportes y ocultar publicaciones o comentarios.
+                </p>
+                <Link
+                  href={`/app/r/${community.slug}/moderation`}
+                  className="mt-1.5 inline-flex items-center justify-center gap-1.5 rounded-full bg-neutral-900 border border-neutral-800 text-neutral-200 px-4 py-2 text-xs font-semibold hover:bg-neutral-800 hover:text-white transition-all w-full cursor-pointer"
+                >
+                  <Shield className="h-3.5 w-3.5" />
+                  <span>Ver Reportes</span>
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       )}
