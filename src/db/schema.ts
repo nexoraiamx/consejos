@@ -251,3 +251,59 @@ export const auditLogs = pgTable(
     auditActionIdx: index("audit_action_idx").on(table.action),
   })
 );
+
+// 12. REPUTATION EVENTS TABLE
+export const reputationEvents = pgTable(
+  "reputation_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: varchar("user_id", { length: 256 })
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    eventType: varchar("event_type", { length: 100 }).notNull(), // 'POST_UPVOTED', 'COMMENT_UPVOTED', etc.
+    points: integer("points").notNull(),
+    sourceType: varchar("source_type", { length: 50 }), // 'POST', 'COMMENT', 'SYSTEM'
+    sourceId: uuid("source_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    reputationUserIdx: index("reputation_event_user_idx").on(table.userId),
+  })
+);
+
+// 13. USER REPUTATION TABLE (Cache)
+export const userReputation = pgTable(
+  "user_reputation",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: varchar("user_id", { length: 256 })
+      .references(() => users.id, { onDelete: "cascade" })
+      .unique()
+      .notNull(),
+    score: integer("score").default(0).notNull(),
+    level: integer("level").default(1).notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    userRepScoreIdx: index("user_rep_score_idx").on(table.score),
+  })
+);
+
+// 14. BOOKMARKS TABLE
+export const bookmarks = pgTable(
+  "bookmarks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: varchar("user_id", { length: 256 })
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    postId: uuid("post_id")
+      .references(() => posts.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    userPostBookmarkUnique: unique("user_post_bookmark_unique").on(table.userId, table.postId),
+    bookmarkUserIdx: index("bookmark_user_idx").on(table.userId),
+  })
+);
