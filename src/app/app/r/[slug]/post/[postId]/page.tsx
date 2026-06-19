@@ -1,7 +1,8 @@
 import { db } from "@/db";
-import { posts, communities, communityMembers, profiles, userReputation } from "@/db/schema";
+import { posts, communities, communityMembers, profiles, userReputation, comments } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-helpers";
+import { CommentSection } from "@/components/shared/comment-section";
 import { redirect, notFound } from "next/navigation";
 import { 
   ArrowLeft, 
@@ -54,6 +55,7 @@ export default async function PostDetailPage({ params }: Props) {
       category: posts.category,
       tags: posts.tags,
       status: posts.status,
+      acceptedAnswerId: posts.acceptedAnswerId,
       createdAt: posts.createdAt,
       authorId: posts.authorId,
       authorName: profiles.displayName,
@@ -117,6 +119,62 @@ export default async function PostDetailPage({ params }: Props) {
       </div>
     );
   }
+
+  // 4. Obtener comentarios del post
+  const dbComments = await db
+    .select({
+      id: comments.id,
+      postId: comments.postId,
+      parentId: comments.parentId,
+      authorId: comments.authorId,
+      content: comments.content,
+      status: comments.status,
+      createdAt: comments.createdAt,
+      authorName: profiles.displayName,
+      authorAvatar: profiles.avatarUrl,
+      authorReputation: userReputation.score,
+    })
+    .from(comments)
+    .innerJoin(profiles, eq(profiles.userId, comments.authorId))
+    .leftJoin(userReputation, eq(userReputation.userId, comments.authorId))
+    .where(
+      and(
+        eq(comments.postId, postId),
+        isNull(comments.deletedAt)
+      )
+    )
+    .orderBy(comments.createdAt);
+
+  // Calcular si el usuario actual es moderador o administrador local
+  let canModerate = isGlobalAdmin;
+  if (currentUser && !isGlobalAdmin) {
+    const membership = await db.query.communityMembers.findFirst({
+      where: and(
+        eq(communityMembers.communityId, community.id),
+        eq(communityMembers.userId, currentUser.id)
+      ),
+    });
+    if (
+      membership &&
+      (membership.role === "COMMUNITY_ADMIN" || membership.role === "MODERATOR") &&
+      membership.status === "APPROVED"
+    ) {
+      canModerate = true;
+    }
+  }
+
+  const formattedComments = dbComments.map((c) => ({
+    id: c.id,
+    postId: c.postId,
+    parentId: c.parentId,
+    authorId: c.authorId,
+    content: c.content,
+    status: c.status as "ACTIVE" | "HIDDEN" | "DELETED",
+    createdAt: c.createdAt.toLocaleDateString() + " " + c.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    authorName: c.authorName,
+    authorAvatar: c.authorAvatar || undefined,
+    authorReputation: c.authorReputation || 0,
+  }));
 
   const getTypeBadge = () => {
     switch (postResult.postType) {
@@ -222,22 +280,18 @@ export default async function PostDetailPage({ params }: Props) {
             )}
           </article>
 
-          {/* Comentarios Placeholder */}
-          <div className="border-t border-neutral-900 pt-8 mt-4 flex flex-col gap-6">
-            <div className="flex items-center justify-between border-b border-neutral-900 pb-3">
-              <h3 className="text-xs font-semibold text-neutral-400 tracking-wider uppercase">
-                Comentarios
-              </h3>
-            </div>
-
-            <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed border-neutral-900 rounded-3xl bg-neutral-950/20 px-6">
-              <MessageSquare className="h-8 w-8 text-neutral-700 mb-3" />
-              <h4 className="text-xs font-semibold text-neutral-400">Sin comentarios aún</h4>
-              <p className="text-[10px] text-neutral-500 max-w-[280px] mt-1 font-light leading-relaxed">
-                Los comentarios y respuestas anidadas serán habilitados en la siguiente fase de desarrollo.
-              </p>
-            </div>
-          </div>
+          {/* Comentarios interactivos */}
+          <CommentSection
+            postId={postResult.id}
+            postAuthorId={postResult.authorId}
+            initialComments={formattedComments}
+            currentUserId={currentUser?.id}
+            canModerate={canModerate}
+            isMember={isJoined}
+            isSuspended={currentUser?.isSuspended}
+            acceptedAnswerId={postResult.acceptedAnswerId}
+            postStatus={postResult.status}
+          />
 
         </div>
 

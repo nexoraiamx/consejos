@@ -73,34 +73,30 @@ export async function createPostAction(formData: PostInput) {
   }
 
   try {
-    const newPost = await db.transaction(async (tx) => {
-      // Insertar post
-      const [insertedPost] = await tx.insert(posts).values({
-        communityId: formData.communityId,
-        authorId: user.id,
-        title,
-        content,
-        postType,
-        category: category || null,
-        tags,
-        status: "ACTIVE",
-      }).returning();
+    // Ejecutar secuencialmente por limitación de transacciones en el driver neon-http
+    const [insertedPost] = await db.insert(posts).values({
+      communityId: formData.communityId,
+      authorId: user.id,
+      title,
+      content,
+      postType,
+      category: category || null,
+      tags,
+      status: "ACTIVE",
+    }).returning();
 
-      // Log de auditoría
-      await tx.insert(auditLogs).values({
-        actorId: user.id,
-        action: "POST_CREATE",
-        targetType: "POST",
-        targetId: insertedPost.id,
-        description: `Publicación creada: "${title}" (${postType}) en r/${community.slug}`,
-      });
-
-      return insertedPost;
+    // Log de auditoría
+    await db.insert(auditLogs).values({
+      actorId: user.id,
+      action: "POST_CREATE",
+      targetType: "POST",
+      targetId: insertedPost.id,
+      description: `Publicación creada: "${title}" (${postType}) en r/${community.slug}`,
     });
 
     revalidatePath(`/app/r/${community.slug}`);
     revalidatePath("/app");
-    return { success: true, postId: newPost.id, slug: community.slug };
+    return { success: true, postId: insertedPost.id, slug: community.slug };
   } catch (error) {
     console.error("Error al crear post:", error);
     return { success: false, error: "Error interno del servidor al procesar la publicación." };
@@ -157,23 +153,21 @@ export async function updatePostAction(
   });
 
   try {
-    await db.transaction(async (tx) => {
-      await tx.update(posts).set({
-        title,
-        content,
-        postType,
-        category: category || null,
-        tags,
-        updatedAt: new Date(),
-      }).where(eq(posts.id, postId));
+    await db.update(posts).set({
+      title,
+      content,
+      postType,
+      category: category || null,
+      tags,
+      updatedAt: new Date(),
+    }).where(eq(posts.id, postId));
 
-      await tx.insert(auditLogs).values({
-        actorId: user.id,
-        action: "POST_UPDATE",
-        targetType: "POST",
-        targetId: postId,
-        description: `Publicación editada: "${title}" (${postType})`,
-      });
+    await db.insert(auditLogs).values({
+      actorId: user.id,
+      action: "POST_UPDATE",
+      targetType: "POST",
+      targetId: postId,
+      description: `Publicación editada: "${title}" (${postType})`,
     });
 
     if (community) {
@@ -214,19 +208,17 @@ export async function softDeletePostAction(postId: string) {
   });
 
   try {
-    await db.transaction(async (tx) => {
-      await tx.update(posts).set({
-        status: "DELETED",
-        deletedAt: new Date(),
-      }).where(eq(posts.id, postId));
+    await db.update(posts).set({
+      status: "DELETED",
+      deletedAt: new Date(),
+    }).where(eq(posts.id, postId));
 
-      await tx.insert(auditLogs).values({
-        actorId: user.id,
-        action: "POST_DELETE",
-        targetType: "POST",
-        targetId: postId,
-        description: `Publicación eliminada (Soft delete): "${post.title}"`,
-      });
+    await db.insert(auditLogs).values({
+      actorId: user.id,
+      action: "POST_DELETE",
+      targetType: "POST",
+      targetId: postId,
+      description: `Publicación eliminada (Soft delete): "${post.title}"`,
     });
 
     if (community) {
@@ -290,19 +282,17 @@ export async function hidePostAction(postId: string) {
   });
 
   try {
-    await db.transaction(async (tx) => {
-      await tx.update(posts).set({
-        status: "HIDDEN",
-        updatedAt: new Date(),
-      }).where(eq(posts.id, postId));
+    await db.update(posts).set({
+      status: "HIDDEN",
+      updatedAt: new Date(),
+    }).where(eq(posts.id, postId));
 
-      await tx.insert(auditLogs).values({
-        actorId: user.id,
-        action: "POST_HIDE",
-        targetType: "POST",
-        targetId: postId,
-        description: `Publicación marcada como oculta por moderación: "${post.title}"`,
-      });
+    await db.insert(auditLogs).values({
+      actorId: user.id,
+      action: "POST_HIDE",
+      targetType: "POST",
+      targetId: postId,
+      description: `Publicación marcada como oculta por moderación: "${post.title}"`,
     });
 
     if (community) {
@@ -367,19 +357,17 @@ export async function unhidePostAction(postId: string) {
   });
 
   try {
-    await db.transaction(async (tx) => {
-      await tx.update(posts).set({
-        status: "ACTIVE",
-        updatedAt: new Date(),
-      }).where(eq(posts.id, postId));
+    await db.update(posts).set({
+      status: "ACTIVE",
+      updatedAt: new Date(),
+    }).where(eq(posts.id, postId));
 
-      await tx.insert(auditLogs).values({
-        actorId: user.id,
-        action: "POST_UNHIDE",
-        targetType: "POST",
-        targetId: postId,
-        description: `Publicación restaurada a activa por moderación: "${post.title}"`,
-      });
+    await db.insert(auditLogs).values({
+      actorId: user.id,
+      action: "POST_UNHIDE",
+      targetType: "POST",
+      targetId: postId,
+      description: `Publicación restaurada a activa por moderación: "${post.title}"`,
     });
 
     if (community) {
