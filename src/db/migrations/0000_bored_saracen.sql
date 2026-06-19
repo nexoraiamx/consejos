@@ -27,9 +27,10 @@ CREATE TABLE "audit_logs" (
 CREATE TABLE "bookmarks" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" varchar(256) NOT NULL,
-	"post_id" uuid NOT NULL,
+	"target_type" varchar(50) NOT NULL,
+	"target_id" uuid NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
-	CONSTRAINT "user_post_bookmark_unique" UNIQUE("user_id","post_id")
+	CONSTRAINT "user_target_bookmark_unique" UNIQUE("user_id","target_type","target_id")
 );
 --> statement-breakpoint
 CREATE TABLE "comments" (
@@ -90,6 +91,7 @@ CREATE TABLE "posts" (
 	"category" varchar(100),
 	"tags" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"status" varchar(50) DEFAULT 'ACTIVE' NOT NULL,
+	"accepted_answer_id" uuid,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	"deleted_at" timestamp
@@ -105,6 +107,9 @@ CREATE TABLE "profiles" (
 	"website" varchar(256),
 	"twitter_url" varchar(256),
 	"github_url" varchar(256),
+	"is_expert" boolean DEFAULT false NOT NULL,
+	"expertise" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"verified_at" timestamp,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "profiles_user_id_unique" UNIQUE("user_id"),
@@ -168,7 +173,6 @@ CREATE TABLE "users" (
 ALTER TABLE "attachments" ADD CONSTRAINT "attachments_uploader_id_users_id_fk" FOREIGN KEY ("uploader_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_actor_id_users_id_fk" FOREIGN KEY ("actor_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bookmarks" ADD CONSTRAINT "bookmarks_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "bookmarks" ADD CONSTRAINT "bookmarks_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_parent_id_comments_id_fk" FOREIGN KEY ("parent_id") REFERENCES "public"."comments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_author_id_users_id_fk" FOREIGN KEY ("author_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -179,6 +183,7 @@ ALTER TABLE "notifications" ADD CONSTRAINT "notifications_recipient_id_users_id_
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_sender_id_users_id_fk" FOREIGN KEY ("sender_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_community_id_communities_id_fk" FOREIGN KEY ("community_id") REFERENCES "public"."communities"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_author_id_users_id_fk" FOREIGN KEY ("author_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "posts" ADD CONSTRAINT "posts_accepted_answer_id_comments_id_fk" FOREIGN KEY ("accepted_answer_id") REFERENCES "public"."comments"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "profiles" ADD CONSTRAINT "profiles_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "reactions" ADD CONSTRAINT "reactions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "reports" ADD CONSTRAINT "reports_reporter_id_users_id_fk" FOREIGN KEY ("reporter_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -189,6 +194,7 @@ CREATE INDEX "attachment_target_idx" ON "attachments" USING btree ("target_type"
 CREATE INDEX "audit_actor_idx" ON "audit_logs" USING btree ("actor_id");--> statement-breakpoint
 CREATE INDEX "audit_action_idx" ON "audit_logs" USING btree ("action");--> statement-breakpoint
 CREATE INDEX "bookmark_user_idx" ON "bookmarks" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "bookmark_target_idx" ON "bookmarks" USING btree ("target_type","target_id");--> statement-breakpoint
 CREATE INDEX "comment_post_idx" ON "comments" USING btree ("post_id");--> statement-breakpoint
 CREATE INDEX "comment_parent_idx" ON "comments" USING btree ("parent_id");--> statement-breakpoint
 CREATE INDEX "comment_deleted_at_idx" ON "comments" USING btree ("deleted_at");--> statement-breakpoint

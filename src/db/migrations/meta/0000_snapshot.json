@@ -1,5 +1,5 @@
 {
-  "id": "db104c71-f7b6-4784-aad8-4640b9fd3b74",
+  "id": "d6852cff-2cb8-4161-b85c-9db813e29c3e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -252,8 +252,14 @@
           "primaryKey": false,
           "notNull": true
         },
-        "post_id": {
-          "name": "post_id",
+        "target_type": {
+          "name": "target_type",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_id": {
+          "name": "target_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -281,6 +287,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "bookmark_target_idx": {
+          "name": "bookmark_target_idx",
+          "columns": [
+            {
+              "expression": "target_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "target_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -296,29 +323,17 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
-        },
-        "bookmarks_post_id_posts_id_fk": {
-          "name": "bookmarks_post_id_posts_id_fk",
-          "tableFrom": "bookmarks",
-          "tableTo": "posts",
-          "columnsFrom": [
-            "post_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "user_post_bookmark_unique": {
-          "name": "user_post_bookmark_unique",
+        "user_target_bookmark_unique": {
+          "name": "user_target_bookmark_unique",
           "nullsNotDistinct": false,
           "columns": [
             "user_id",
-            "post_id"
+            "target_type",
+            "target_id"
           ]
         }
       },
@@ -923,6 +938,12 @@
           "notNull": true,
           "default": "'ACTIVE'"
         },
+        "accepted_answer_id": {
+          "name": "accepted_answer_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -1032,6 +1053,19 @@
           ],
           "onDelete": "set null",
           "onUpdate": "no action"
+        },
+        "posts_accepted_answer_id_comments_id_fk": {
+          "name": "posts_accepted_answer_id_comments_id_fk",
+          "tableFrom": "posts",
+          "tableTo": "comments",
+          "columnsFrom": [
+            "accepted_answer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1096,6 +1130,26 @@
         "github_url": {
           "name": "github_url",
           "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_expert": {
+          "name": "is_expert",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "expertise": {
+          "name": "expertise",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "verified_at": {
+          "name": "verified_at",
+          "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         },

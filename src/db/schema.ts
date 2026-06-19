@@ -18,7 +18,7 @@ export const users = pgTable(
   })
 );
 
-// 2. PROFILES TABLE (User public metadata)
+// 2. PROFILES TABLE (User public metadata & Experts)
 export const profiles = pgTable(
   "profiles",
   {
@@ -34,6 +34,9 @@ export const profiles = pgTable(
     website: varchar("website", { length: 256 }),
     twitterUrl: varchar("twitter_url", { length: 256 }),
     githubUrl: varchar("github_url", { length: 256 }),
+    isExpert: boolean("is_expert").default(false).notNull(), // Expert System Flag
+    expertise: jsonb("expertise").$type<string[]>().default([]).notNull(), // Expert Tags
+    verifiedAt: timestamp("verified_at"), // Verification Timestamp
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -103,6 +106,7 @@ export const posts = pgTable(
     category: varchar("category", { length: 100 }),
     tags: jsonb("tags").$type<string[]>().default([]).notNull(),
     status: varchar("status", { length: 50 }).default("ACTIVE").notNull(), // 'ACTIVE', 'HIDDEN', 'DELETED'
+    acceptedAnswerId: uuid("accepted_answer_id").references((): any => comments.id, { onDelete: "set null" }), // Accepted Answer Support
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
     deletedAt: timestamp("deleted_at"),
@@ -289,7 +293,7 @@ export const userReputation = pgTable(
   })
 );
 
-// 14. BOOKMARKS TABLE
+// 14. BOOKMARKS TABLE (Generic for multiple targets)
 export const bookmarks = pgTable(
   "bookmarks",
   {
@@ -297,13 +301,13 @@ export const bookmarks = pgTable(
     userId: varchar("user_id", { length: 256 })
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
-    postId: uuid("post_id")
-      .references(() => posts.id, { onDelete: "cascade" })
-      .notNull(),
+    targetType: varchar("target_type", { length: 50 }).notNull(), // 'POST', 'RESOURCE', 'COMMENT', etc.
+    targetId: uuid("target_id").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
-    userPostBookmarkUnique: unique("user_post_bookmark_unique").on(table.userId, table.postId),
+    userTargetBookmarkUnique: unique("user_target_bookmark_unique").on(table.userId, table.targetType, table.targetId),
     bookmarkUserIdx: index("bookmark_user_idx").on(table.userId),
+    bookmarkTargetIdx: index("bookmark_target_idx").on(table.targetType, table.targetId),
   })
 );
