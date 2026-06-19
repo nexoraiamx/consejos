@@ -1,6 +1,6 @@
 "use server";
 
-import { db } from "@/db";
+import { db, poolDb } from "@/db";
 import { posts, communities, communityMembers, auditLogs } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth-helpers";
@@ -73,30 +73,34 @@ export async function createPostAction(formData: PostInput) {
   }
 
   try {
-    // Ejecutar secuencialmente por limitación de transacciones en el driver neon-http
-    const [insertedPost] = await db.insert(posts).values({
-      communityId: formData.communityId,
-      authorId: user.id,
-      title,
-      content,
-      postType,
-      category: category || null,
-      tags,
-      status: "ACTIVE",
-    }).returning();
+    // Usar poolDb.transaction para atomicidad real
+    const newPost = await poolDb.transaction(async (tx) => {
+      const [insertedPost] = await tx.insert(posts).values({
+        communityId: formData.communityId,
+        authorId: user.id,
+        title,
+        content,
+        postType,
+        category: category || null,
+        tags,
+        status: "ACTIVE",
+      }).returning();
 
-    // Log de auditoría
-    await db.insert(auditLogs).values({
-      actorId: user.id,
-      action: "POST_CREATE",
-      targetType: "POST",
-      targetId: insertedPost.id,
-      description: `Publicación creada: "${title}" (${postType}) en r/${community.slug}`,
+      // Log de auditoría
+      await tx.insert(auditLogs).values({
+        actorId: user.id,
+        action: "POST_CREATE",
+        targetType: "POST",
+        targetId: insertedPost.id,
+        description: `Publicación creada: "${title}" (${postType}) en r/${community.slug}`,
+      });
+
+      return insertedPost;
     });
 
     revalidatePath(`/app/r/${community.slug}`);
     revalidatePath("/app");
-    return { success: true, postId: insertedPost.id, slug: community.slug };
+    return { success: true, postId: newPost.id, slug: community.slug };
   } catch (error) {
     console.error("Error al crear post:", error);
     return { success: false, error: "Error interno del servidor al procesar la publicación." };
@@ -153,21 +157,24 @@ export async function updatePostAction(
   });
 
   try {
-    await db.update(posts).set({
-      title,
-      content,
-      postType,
-      category: category || null,
-      tags,
-      updatedAt: new Date(),
-    }).where(eq(posts.id, postId));
+    // Usar poolDb.transaction para atomicidad real
+    await poolDb.transaction(async (tx) => {
+      await tx.update(posts).set({
+        title,
+        content,
+        postType,
+        category: category || null,
+        tags,
+        updatedAt: new Date(),
+      }).where(eq(posts.id, postId));
 
-    await db.insert(auditLogs).values({
-      actorId: user.id,
-      action: "POST_UPDATE",
-      targetType: "POST",
-      targetId: postId,
-      description: `Publicación editada: "${title}" (${postType})`,
+      await tx.insert(auditLogs).values({
+        actorId: user.id,
+        action: "POST_UPDATE",
+        targetType: "POST",
+        targetId: postId,
+        description: `Publicación editada: "${title}" (${postType})`,
+      });
     });
 
     if (community) {
@@ -208,17 +215,20 @@ export async function softDeletePostAction(postId: string) {
   });
 
   try {
-    await db.update(posts).set({
-      status: "DELETED",
-      deletedAt: new Date(),
-    }).where(eq(posts.id, postId));
+    // Usar poolDb.transaction para atomicidad real
+    await poolDb.transaction(async (tx) => {
+      await tx.update(posts).set({
+        status: "DELETED",
+        deletedAt: new Date(),
+      }).where(eq(posts.id, postId));
 
-    await db.insert(auditLogs).values({
-      actorId: user.id,
-      action: "POST_DELETE",
-      targetType: "POST",
-      targetId: postId,
-      description: `Publicación eliminada (Soft delete): "${post.title}"`,
+      await tx.insert(auditLogs).values({
+        actorId: user.id,
+        action: "POST_DELETE",
+        targetType: "POST",
+        targetId: postId,
+        description: `Publicación eliminada (Soft delete): "${post.title}"`,
+      });
     });
 
     if (community) {
@@ -282,17 +292,20 @@ export async function hidePostAction(postId: string) {
   });
 
   try {
-    await db.update(posts).set({
-      status: "HIDDEN",
-      updatedAt: new Date(),
-    }).where(eq(posts.id, postId));
+    // Usar poolDb.transaction para atomicidad real
+    await poolDb.transaction(async (tx) => {
+      await tx.update(posts).set({
+        status: "HIDDEN",
+        updatedAt: new Date(),
+      }).where(eq(posts.id, postId));
 
-    await db.insert(auditLogs).values({
-      actorId: user.id,
-      action: "POST_HIDE",
-      targetType: "POST",
-      targetId: postId,
-      description: `Publicación marcada como oculta por moderación: "${post.title}"`,
+      await tx.insert(auditLogs).values({
+        actorId: user.id,
+        action: "POST_HIDE",
+        targetType: "POST",
+        targetId: postId,
+        description: `Publicación marcada como oculta por moderación: "${post.title}"`,
+      });
     });
 
     if (community) {
@@ -357,17 +370,20 @@ export async function unhidePostAction(postId: string) {
   });
 
   try {
-    await db.update(posts).set({
-      status: "ACTIVE",
-      updatedAt: new Date(),
-    }).where(eq(posts.id, postId));
+    // Usar poolDb.transaction para atomicidad real
+    await poolDb.transaction(async (tx) => {
+      await tx.update(posts).set({
+        status: "ACTIVE",
+        updatedAt: new Date(),
+      }).where(eq(posts.id, postId));
 
-    await db.insert(auditLogs).values({
-      actorId: user.id,
-      action: "POST_UNHIDE",
-      targetType: "POST",
-      targetId: postId,
-      description: `Publicación restaurada a activa por moderación: "${post.title}"`,
+      await tx.insert(auditLogs).values({
+        actorId: user.id,
+        action: "POST_UNHIDE",
+        targetType: "POST",
+        targetId: postId,
+        description: `Publicación restaurada a activa por moderación: "${post.title}"`,
+      });
     });
 
     if (community) {

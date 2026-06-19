@@ -1,4 +1,4 @@
-import { db } from "@/db";
+import { db, poolDb } from "@/db";
 import { users, profiles, communities, communityMembers, posts, comments, auditLogs, userReputation, reputationEvents } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 
@@ -201,40 +201,42 @@ async function testCommentsFlow() {
 
     // 13. Caso de Prueba: Cambiar respuesta aceptada a Comentario 2
     console.log("\n--- Prueba 8: Cambiar Respuesta Aceptada (Revertir anterior y sumar nuevo) ---");
-    // Consultas secuenciales simulando acceptAnswerAction al cambiar de respuesta (sin db.transaction por limitación de neon-http)
-    // Revertir reputación de Commenter 1
-    await db.insert(reputationEvents).values({
-      userId: userIdCommenter1,
-      eventType: "ANSWER_UNACCEPTED",
-      points: -50,
-      sourceType: "COMMENT",
-      sourceId: commentRoot.id,
-    });
-    await db.insert(auditLogs).values({
-      actorId: userIdPostAuthor,
-      action: "ANSWER_UNACCEPTED",
-      targetType: "POST",
-      targetId: post.id,
-      description: `Revocada respuesta aceptada para comentario ${commentRoot.id}`,
-    });
+    // Consultas transaccionales reales simulando acceptAnswerAction (usando poolDb.transaction)
+    await poolDb.transaction(async (tx) => {
+      // Revertir reputación de Commenter 1
+      await tx.insert(reputationEvents).values({
+        userId: userIdCommenter1,
+        eventType: "ANSWER_UNACCEPTED",
+        points: -50,
+        sourceType: "COMMENT",
+        sourceId: commentRoot.id,
+      });
+      await tx.insert(auditLogs).values({
+        actorId: userIdPostAuthor,
+        action: "ANSWER_UNACCEPTED",
+        targetType: "POST",
+        targetId: post.id,
+        description: `Revocada respuesta aceptada para comentario ${commentRoot.id}`,
+      });
 
-    // Establecer nueva respuesta aceptada
-    await db.update(posts).set({ acceptedAnswerId: commentReply.id }).where(eq(posts.id, post.id));
+      // Establecer nueva respuesta aceptada
+      await tx.update(posts).set({ acceptedAnswerId: commentReply.id }).where(eq(posts.id, post.id));
 
-    // Otorgar reputación a Commenter 2
-    await db.insert(reputationEvents).values({
-      userId: userIdCommenter2,
-      eventType: "ANSWER_ACCEPTED",
-      points: 50,
-      sourceType: "COMMENT",
-      sourceId: commentReply.id,
-    });
-    await db.insert(auditLogs).values({
-      actorId: userIdPostAuthor,
-      action: "ANSWER_ACCEPTED",
-      targetType: "POST",
-      targetId: post.id,
-      description: `Comentario ${commentReply.id} marcado como respuesta aceptada`,
+      // Otorgar reputación a Commenter 2
+      await tx.insert(reputationEvents).values({
+        userId: userIdCommenter2,
+        eventType: "ANSWER_ACCEPTED",
+        points: 50,
+        sourceType: "COMMENT",
+        sourceId: commentReply.id,
+      });
+      await tx.insert(auditLogs).values({
+        actorId: userIdPostAuthor,
+        action: "ANSWER_ACCEPTED",
+        targetType: "POST",
+        targetId: post.id,
+        description: `Comentario ${commentReply.id} marcado como respuesta aceptada`,
+      });
     });
 
     // Verificar balances de reputación
@@ -262,33 +264,35 @@ async function testCommentsFlow() {
 
     // 15. Caso de Prueba: Soft delete de comentario y revocación automática
     console.log("\n--- Prueba 10: Soft Delete de la Respuesta Aceptada ---");
-    // Soft delete comentario 2 (secuencialmente por limitación de neon-http)
-    await db.update(comments).set({ status: "DELETED", deletedAt: new Date() }).where(eq(comments.id, commentReply.id));
-    await db.insert(auditLogs).values({
-      actorId: userIdCommenter2,
-      action: "COMMENT_DELETE",
-      targetType: "COMMENT",
-      targetId: commentReply.id,
-      description: "Comentario eliminado por soft delete",
-    });
+    // Soft delete comentario 2 (usando poolDb.transaction para consistencia atómica)
+    await poolDb.transaction(async (tx) => {
+      await tx.update(comments).set({ status: "DELETED", deletedAt: new Date() }).where(eq(comments.id, commentReply.id));
+      await tx.insert(auditLogs).values({
+        actorId: userIdCommenter2,
+        action: "COMMENT_DELETE",
+        targetType: "COMMENT",
+        targetId: commentReply.id,
+        description: "Comentario eliminado por soft delete",
+      });
 
-    // Revocar respuesta aceptada en el post
-    await db.update(posts).set({ acceptedAnswerId: null }).where(eq(posts.id, post.id));
+      // Revocar respuesta aceptada en el post
+      await tx.update(posts).set({ acceptedAnswerId: null }).where(eq(posts.id, post.id));
 
-    // Revertir reputación de Commenter 2
-    await db.insert(reputationEvents).values({
-      userId: userIdCommenter2,
-      eventType: "ANSWER_UNACCEPTED",
-      points: -50,
-      sourceType: "COMMENT",
-      sourceId: commentReply.id,
-    });
-    await db.insert(auditLogs).values({
-      actorId: userIdCommenter2,
-      action: "ANSWER_UNACCEPTED",
-      targetType: "POST",
-      targetId: post.id,
-      description: `Revocada respuesta aceptada para comentario ${commentReply.id} por eliminación del mismo`,
+      // Revertir reputación de Commenter 2
+      await tx.insert(reputationEvents).values({
+        userId: userIdCommenter2,
+        eventType: "ANSWER_UNACCEPTED",
+        points: -50,
+        sourceType: "COMMENT",
+        sourceId: commentReply.id,
+      });
+      await tx.insert(auditLogs).values({
+        actorId: userIdCommenter2,
+        action: "ANSWER_UNACCEPTED",
+        targetType: "POST",
+        targetId: post.id,
+        description: `Revocada respuesta aceptada para comentario ${commentReply.id} por eliminación del mismo`,
+      });
     });
 
     const repUser2Deleted = await db.query.userReputation.findFirst({ where: eq(userReputation.userId, userIdCommenter2) });

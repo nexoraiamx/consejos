@@ -1,6 +1,6 @@
 "use server";
 
-import { db } from "@/db";
+import { db, poolDb } from "@/db";
 import { comments, posts, communities, communityMembers, auditLogs, reputationEvents } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth-helpers";
@@ -87,32 +87,36 @@ export async function createCommentAction(formData: CreateCommentInput) {
     }
   }
 
-  // 5. Insertar comentario y log de auditoría (Ejecutado secuencialmente por limitación de transacciones en neon-http)
+  // 5. Insertar comentario y log de auditoría en una transacción atómica
   const community = await db.query.communities.findFirst({
     where: eq(communities.id, post.communityId),
   });
 
   try {
-    const [inserted] = await db.insert(comments).values({
-      postId: formData.postId,
-      parentId: formData.parentId || null,
-      authorId: user.id,
-      content,
-      status: "ACTIVE",
-    }).returning();
+    const newComment = await poolDb.transaction(async (tx) => {
+      const [inserted] = await tx.insert(comments).values({
+        postId: formData.postId,
+        parentId: formData.parentId || null,
+        authorId: user.id,
+        content,
+        status: "ACTIVE",
+      }).returning();
 
-    await db.insert(auditLogs).values({
-      actorId: user.id,
-      action: "COMMENT_CREATE",
-      targetType: "COMMENT",
-      targetId: inserted.id,
-      description: `Comentario creado en la publicación "${post.title}"`,
+      await tx.insert(auditLogs).values({
+        actorId: user.id,
+        action: "COMMENT_CREATE",
+        targetType: "COMMENT",
+        targetId: inserted.id,
+        description: `Comentario creado en la publicación "${post.title}"`,
+      });
+
+      return inserted;
     });
 
     if (community) {
       revalidatePath(`/app/r/${community.slug}/post/${formData.postId}`);
     }
-    return { success: true, commentId: inserted.id };
+    return { success: true, commentId: newComment.id };
   } catch (error) {
     console.error("Error al crear comentario:", error);
     return { success: false, error: "Error interno del servidor al crear el comentario." };
@@ -150,17 +154,19 @@ export async function updateCommentAction(commentId: string, content: string) {
   }) : null;
 
   try {
-    await db.update(comments).set({
-      content: trimmedContent,
-      updatedAt: new Date(),
-    }).where(eq(comments.id, commentId));
+    await poolDb.transaction(async (tx) => {
+      await tx.update(comments).set({
+        content: trimmedContent,
+        updatedAt: new Date(),
+      }).where(eq(comments.id, commentId));
 
-    await db.insert(auditLogs).values({
-      actorId: user.id,
-      action: "COMMENT_UPDATE",
-      targetType: "COMMENT",
-      targetId: commentId,
-      description: `Comentario actualizado`,
+      await tx.insert(auditLogs).values({
+        actorId: user.id,
+        action: "COMMENT_UPDATE",
+        targetType: "COMMENT",
+        targetId: commentId,
+        description: `Comentario actualizado`,
+      });
     });
 
     if (community) {
@@ -199,43 +205,45 @@ export async function softDeleteCommentAction(commentId: string) {
   }) : null;
 
   try {
-    // 1. Marcar el comentario como eliminado
-    await db.update(comments).set({
-      status: "DELETED",
-      deletedAt: new Date(),
-    }).where(eq(comments.id, commentId));
+    await poolDb.transaction(async (tx) => {
+      // 1. Marcar el comentario como eliminado
+      await tx.update(comments).set({
+        status: "DELETED",
+        deletedAt: new Date(),
+      }).where(eq(comments.id, commentId));
 
-    await db.insert(auditLogs).values({
-      actorId: user.id,
-      action: "COMMENT_DELETE",
-      targetType: "COMMENT",
-      targetId: commentId,
-      description: `Comentario eliminado por su autor`,
-    });
-
-    // 2. Si el comentario era la respuesta aceptada, removerla y revertir reputación
-    if (post && post.acceptedAnswerId === commentId) {
-      await db.update(posts).set({
-        acceptedAnswerId: null,
-        updatedAt: new Date(),
-      }).where(eq(posts.id, post.id));
-
-      await db.insert(reputationEvents).values({
-        userId: comment.authorId,
-        eventType: "ANSWER_UNACCEPTED",
-        points: -50,
-        sourceType: "COMMENT",
-        sourceId: commentId,
-      });
-
-      await db.insert(auditLogs).values({
+      await tx.insert(auditLogs).values({
         actorId: user.id,
-        action: "ANSWER_UNACCEPTED",
-        targetType: "POST",
-        targetId: post.id,
-        description: `Respuesta aceptada revocada porque el comentario fue eliminado`,
+        action: "COMMENT_DELETE",
+        targetType: "COMMENT",
+        targetId: commentId,
+        description: `Comentario eliminado por su autor`,
       });
-    }
+
+      // 2. Si el comentario era la respuesta aceptada, removerla y revertir reputación
+      if (post && post.acceptedAnswerId === commentId) {
+        await tx.update(posts).set({
+          acceptedAnswerId: null,
+          updatedAt: new Date(),
+        }).where(eq(posts.id, post.id));
+
+        await tx.insert(reputationEvents).values({
+          userId: comment.authorId,
+          eventType: "ANSWER_UNACCEPTED",
+          points: -50,
+          sourceType: "COMMENT",
+          sourceId: commentId,
+        });
+
+        await tx.insert(auditLogs).values({
+          actorId: user.id,
+          action: "ANSWER_UNACCEPTED",
+          targetType: "POST",
+          targetId: post.id,
+          description: `Respuesta aceptada revocada porque el comentario fue eliminado`,
+        });
+      }
+    });
 
     if (community) {
       revalidatePath(`/app/r/${community.slug}/post/${comment.postId}`);
@@ -302,17 +310,19 @@ export async function hideCommentAction(commentId: string) {
   });
 
   try {
-    await db.update(comments).set({
-      status: "HIDDEN",
-      updatedAt: new Date(),
-    }).where(eq(comments.id, commentId));
+    await poolDb.transaction(async (tx) => {
+      await tx.update(comments).set({
+        status: "HIDDEN",
+        updatedAt: new Date(),
+      }).where(eq(comments.id, commentId));
 
-    await db.insert(auditLogs).values({
-      actorId: user.id,
-      action: "COMMENT_HIDE",
-      targetType: "COMMENT",
-      targetId: commentId,
-      description: `Comentario marcado como oculto por moderación`,
+      await tx.insert(auditLogs).values({
+        actorId: user.id,
+        action: "COMMENT_HIDE",
+        targetType: "COMMENT",
+        targetId: commentId,
+        description: `Comentario marcado como oculto por moderación`,
+      });
     });
 
     if (community) {
@@ -380,17 +390,19 @@ export async function unhideCommentAction(commentId: string) {
   });
 
   try {
-    await db.update(comments).set({
-      status: "ACTIVE",
-      updatedAt: new Date(),
-    }).where(eq(comments.id, commentId));
+    await poolDb.transaction(async (tx) => {
+      await tx.update(comments).set({
+        status: "ACTIVE",
+        updatedAt: new Date(),
+      }).where(eq(comments.id, commentId));
 
-    await db.insert(auditLogs).values({
-      actorId: user.id,
-      action: "COMMENT_UNHIDE",
-      targetType: "COMMENT",
-      targetId: commentId,
-      description: `Comentario restaurado a activo por moderación`,
+      await tx.insert(auditLogs).values({
+        actorId: user.id,
+        action: "COMMENT_UNHIDE",
+        targetType: "COMMENT",
+        targetId: commentId,
+        description: `Comentario restaurado a activo por moderación`,
+      });
     });
 
     if (community) {
@@ -440,82 +452,84 @@ export async function acceptAnswerAction(postId: string, commentId: string) {
   });
 
   try {
-    // Caso A: Se está haciendo click sobre la respuesta que ya está aceptada (Des-aceptar / Toggle off)
-    if (post.acceptedAnswerId === commentId) {
-      // Remover del post
-      await db.update(posts).set({
-        acceptedAnswerId: null,
-        updatedAt: new Date(),
-      }).where(eq(posts.id, postId));
+    await poolDb.transaction(async (tx) => {
+      // Caso A: Se está haciendo click sobre la respuesta que ya está aceptada (Des-aceptar / Toggle off)
+      if (post.acceptedAnswerId === commentId) {
+        // Remover del post
+        await tx.update(posts).set({
+          acceptedAnswerId: null,
+          updatedAt: new Date(),
+        }).where(eq(posts.id, postId));
 
-      // Evento negativo de reputación
-      await db.insert(reputationEvents).values({
-        userId: comment.authorId,
-        eventType: "ANSWER_UNACCEPTED",
-        points: -50,
-        sourceType: "COMMENT",
-        sourceId: commentId,
-      });
-
-      // Log de auditoría
-      await db.insert(auditLogs).values({
-        actorId: user.id,
-        action: "ANSWER_UNACCEPTED",
-        targetType: "POST",
-        targetId: postId,
-        description: `Respuesta desmarcada como aceptada: Comentario ${commentId}`,
-      });
-    } 
-    // Caso B: Se está aceptando una respuesta nueva o cambiando la anterior
-    else {
-      // Si ya había una respuesta aceptada previa, revertir su reputación
-      if (post.acceptedAnswerId) {
-        const oldComment = await db.query.comments.findFirst({
-          where: eq(comments.id, post.acceptedAnswerId),
+        // Evento negativo de reputación
+        await tx.insert(reputationEvents).values({
+          userId: comment.authorId,
+          eventType: "ANSWER_UNACCEPTED",
+          points: -50,
+          sourceType: "COMMENT",
+          sourceId: commentId,
         });
-        if (oldComment) {
-          await db.insert(reputationEvents).values({
-            userId: oldComment.authorId,
-            eventType: "ANSWER_UNACCEPTED",
-            points: -50,
-            sourceType: "COMMENT",
-            sourceId: post.acceptedAnswerId,
-          });
 
-          await db.insert(auditLogs).values({
-            actorId: user.id,
-            action: "ANSWER_UNACCEPTED",
-            targetType: "POST",
-            targetId: postId,
-            description: `Respuesta aceptada anterior revocada: Comentario ${post.acceptedAnswerId}`,
+        // Log de auditoría
+        await tx.insert(auditLogs).values({
+          actorId: user.id,
+          action: "ANSWER_UNACCEPTED",
+          targetType: "POST",
+          targetId: postId,
+          description: `Respuesta desmarcada como aceptada: Comentario ${commentId}`,
+        });
+      } 
+      // Caso B: Se está aceptando una respuesta nueva o cambiando la anterior
+      else {
+        // Si ya había una respuesta aceptada previa, revertir su reputación
+        if (post.acceptedAnswerId) {
+          const oldComment = await tx.query.comments.findFirst({
+            where: eq(comments.id, post.acceptedAnswerId),
           });
+          if (oldComment) {
+            await tx.insert(reputationEvents).values({
+              userId: oldComment.authorId,
+              eventType: "ANSWER_UNACCEPTED",
+              points: -50,
+              sourceType: "COMMENT",
+              sourceId: post.acceptedAnswerId,
+            });
+
+            await tx.insert(auditLogs).values({
+              actorId: user.id,
+              action: "ANSWER_UNACCEPTED",
+              targetType: "POST",
+              targetId: postId,
+              description: `Respuesta aceptada anterior revocada: Comentario ${post.acceptedAnswerId}`,
+            });
+          }
         }
+
+        // Marcar la nueva respuesta como aceptada
+        await tx.update(posts).set({
+          acceptedAnswerId: commentId,
+          updatedAt: new Date(),
+        }).where(eq(posts.id, postId));
+
+        // Otorgar puntos al autor del nuevo comentario
+        await tx.insert(reputationEvents).values({
+          userId: comment.authorId,
+          eventType: "ANSWER_ACCEPTED",
+          points: 50,
+          sourceType: "COMMENT",
+          sourceId: commentId,
+        });
+
+        // Log de auditoría
+        await tx.insert(auditLogs).values({
+          actorId: user.id,
+          action: "ANSWER_ACCEPTED",
+          targetType: "POST",
+          targetId: postId,
+          description: `Respuesta marcada como aceptada: Comentario ${commentId}`,
+        });
       }
-
-      // Marcar la nueva respuesta como aceptada
-      await db.update(posts).set({
-        acceptedAnswerId: commentId,
-        updatedAt: new Date(),
-      }).where(eq(posts.id, postId));
-
-      // Otorgar puntos al autor del nuevo comentario
-      await db.insert(reputationEvents).values({
-        userId: comment.authorId,
-        eventType: "ANSWER_ACCEPTED",
-        points: 50,
-        sourceType: "COMMENT",
-        sourceId: commentId,
-      });
-
-      // Log de auditoría
-      await db.insert(auditLogs).values({
-        actorId: user.id,
-        action: "ANSWER_ACCEPTED",
-        targetType: "POST",
-        targetId: postId,
-        description: `Respuesta marcada como aceptada: Comentario ${commentId}`,
-      });
-    }
+    });
 
     if (community) {
       revalidatePath(`/app/r/${community.slug}/post/${postId}`);

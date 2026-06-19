@@ -1,6 +1,6 @@
 "use server";
 
-import { db } from "@/db";
+import { db, poolDb } from "@/db";
 import { communities, communityMembers, auditLogs } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth-helpers";
@@ -50,7 +50,7 @@ export async function createCommunityAction(formData: CreateCommunityInput) {
   }
 
   try {
-    const result = await db.transaction(async (tx) => {
+    const result = await poolDb.transaction(async (tx) => {
       // 1. Crear la comunidad
       const [newCommunity] = await tx.insert(communities).values({
         slug,
@@ -124,7 +124,7 @@ export async function toggleJoinCommunityAction(communityId: string) {
         };
       }
 
-      await db.transaction(async (tx) => {
+      await poolDb.transaction(async (tx) => {
         // Eliminar membresía
         await tx.delete(communityMembers).where(
           and(
@@ -151,7 +151,7 @@ export async function toggleJoinCommunityAction(communityId: string) {
       // Si no es miembro, se une
       const status = community.privacyType === "PUBLIC" ? "APPROVED" : "PENDING";
 
-      await db.transaction(async (tx) => {
+      await poolDb.transaction(async (tx) => {
         await tx.insert(communityMembers).values({
           communityId,
           userId: user.id,
