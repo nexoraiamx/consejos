@@ -34,7 +34,7 @@ export default function Home() {
           </Show>
           <Show when="signed-in">
             <a
-              href="/r"
+              href="/app"
               className="rounded-full bg-neutral-900 border border-neutral-800 text-neutral-200 px-6 py-3 text-sm font-semibold hover:bg-neutral-800 hover:text-white transition-all cursor-pointer"
             >
               Explorar Comunidades
