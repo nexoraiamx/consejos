@@ -215,4 +215,46 @@ CREATE INDEX "report_target_idx" ON "reports" USING btree ("target_type","target
 CREATE INDEX "reputation_event_user_idx" ON "reputation_events" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "user_rep_score_idx" ON "user_reputation" USING btree ("score");--> statement-breakpoint
 CREATE INDEX "email_idx" ON "users" USING btree ("email");--> statement-breakpoint
-CREATE INDEX "user_deleted_at_idx" ON "users" USING btree ("deleted_at");
+CREATE INDEX "user_deleted_at_idx" ON "users" USING btree ("deleted_at");--> statement-breakpoint
+CREATE OR REPLACE FUNCTION update_user_reputation()
+RETURNS TRIGGER AS $$
+DECLARE
+    new_score INT;
+    new_level INT;
+BEGIN
+    SELECT GREATEST(COALESCE(score, 0) + NEW.points, 0)
+    INTO new_score
+    FROM user_reputation
+    WHERE user_id = NEW.user_id;
+
+    IF new_score IS NULL THEN
+        new_score := GREATEST(NEW.points, 0);
+    END IF;
+
+    IF new_score >= 1000 THEN
+        new_level := 5;
+    ELSIF new_score >= 500 THEN
+        new_level := 4;
+    ELSIF new_score >= 250 THEN
+        new_level := 3;
+    ELSIF new_score >= 100 THEN
+        new_level := 2;
+    ELSE
+        new_level := 1;
+    END IF;
+
+    INSERT INTO user_reputation (user_id, score, level, updated_at)
+    VALUES (NEW.user_id, new_score, new_level, NOW())
+    ON CONFLICT (user_id)
+    DO UPDATE SET
+        score = new_score,
+        level = new_level,
+        updated_at = NOW();
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;--> statement-breakpoint
+CREATE TRIGGER trg_update_reputation
+AFTER INSERT ON reputation_events
+FOR EACH ROW
+EXECUTE FUNCTION update_user_reputation();
