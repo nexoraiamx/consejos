@@ -103,6 +103,7 @@ export const posts = pgTable(
       .notNull(),
     title: varchar("title", { length: 256 }).notNull(),
     content: text("content").notNull(),
+    postType: varchar("post_type", { length: 50 }).default("DISCUSSION").notNull(), // 'QUESTION', 'RESOURCE', 'DISCUSSION', 'CASE_STUDY'
     category: varchar("category", { length: 100 }),
     tags: jsonb("tags").$type<string[]>().default([]).notNull(),
     status: varchar("status", { length: 50 }).default("ACTIVE").notNull(), // 'ACTIVE', 'HIDDEN', 'DELETED'

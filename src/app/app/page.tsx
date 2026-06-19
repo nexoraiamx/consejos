@@ -23,6 +23,7 @@ export default function AppDashboard() {
       content: "El secreto de la estética de Apple radica en el uso de espacios en blanco amplios, gradientes de opacidad muy baja y bordes que apenas se perciben. En esta guía repasamos cómo estructurar un sistema de diseño minimalista con variables de Tailwind v4 y sombras difuminadas.",
       communitySlug: "diseno",
       communityName: "Diseño y UX",
+      authorId: "user_mock_1",
       authorName: "Adrián Silva",
       authorAvatar: "",
       category: "Guía",
@@ -39,6 +40,8 @@ export default function AppDashboard() {
           fileUrl: "#",
         },
       ],
+      postType: "DISCUSSION" as const,
+      status: "ACTIVE" as const,
     },
     {
       id: "post_2",
@@ -46,6 +49,7 @@ export default function AppDashboard() {
       content: "Les comparto un componente React Server Component optimizado para realizar streaming directo de respuestas de texto desde la API de Gemini 2.5 Flash, sin necesidad de dependencias complejas ni frameworks pesados de terceros.",
       communitySlug: "desarrollo",
       communityName: "Desarrollo Web",
+      authorId: "user_mock_2",
       authorName: "Elena Rostova",
       authorAvatar: "",
       category: "Recurso",
@@ -62,6 +66,8 @@ export default function AppDashboard() {
           fileUrl: "#",
         },
       ],
+      postType: "RESOURCE" as const,
+      status: "ACTIVE" as const,
     },
   ];
 

@@ -1,17 +1,34 @@
 import { db } from "@/db";
-import { communities, communityMembers, profiles } from "@/db/schema";
-import { eq, and, isNull, sql } from "drizzle-orm";
+import { communities, communityMembers, profiles, posts, userReputation } from "@/db/schema";
+import { eq, and, isNull, sql, desc } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-helpers";
-import { ArrowLeft, Inbox, Globe, Lock, ShieldAlert, Calendar, User, EyeOff, Shield } from "lucide-react";
+import { ArrowLeft, Inbox, Globe, Lock, ShieldAlert, Calendar, User, EyeOff, Shield, Plus } from "lucide-react";
 import Link from "next/link";
 import JoinButton from "./join-button";
 import { notFound } from "next/navigation";
+import { PostCard } from "@/components/shared/post-card";
 
 interface Props {
   params: Promise<{ slug: string }>;
 }
 
 export const dynamic = "force-dynamic";
+
+// Función auxiliar para formatear fechas relativas
+const timeAgo = (date: Date) => {
+  const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+  let interval = Math.floor(seconds / 31536000);
+  if (interval >= 1) return `Hace ${interval} ${interval === 1 ? "año" : "años"}`;
+  interval = Math.floor(seconds / 2592000);
+  if (interval >= 1) return `Hace ${interval} ${interval === 1 ? "mes" : "meses"}`;
+  interval = Math.floor(seconds / 86400);
+  if (interval >= 1) return `Hace ${interval} ${interval === 1 ? "día" : "días"}`;
+  interval = Math.floor(seconds / 3600);
+  if (interval >= 1) return `Hace ${interval} ${interval === 1 ? "hora" : "horas"}`;
+  interval = Math.floor(seconds / 60);
+  if (interval >= 1) return `Hace ${interval} ${interval === 1 ? "minuto" : "minutos"}`;
+  return "Hace unos segundos";
+};
 
 export default async function CommunityDetailPage({ params }: Props) {
   const { slug } = await params;
@@ -64,6 +81,7 @@ export default async function CommunityDetailPage({ params }: Props) {
 
   const isGlobalAdmin = currentUser?.globalRole === "GLOBAL_ADMIN";
   const hasAccess = community.privacyType === "PUBLIC" || isJoined || isGlobalAdmin;
+  const canModerate = isGlobalAdmin || userRole === "COMMUNITY_ADMIN" || userRole === "MODERATOR";
 
   // 4. Nombre del creador
   let creatorName = "Sistema";
@@ -75,6 +93,40 @@ export default async function CommunityDetailPage({ params }: Props) {
       creatorName = creator.displayName;
     }
   }
+
+  // 5. Consultar posts reales de la comunidad con sus autores y reputaciones
+  const postConditions = [
+    eq(posts.communityId, community.id),
+    isNull(posts.deletedAt),
+  ];
+
+  if (!canModerate) {
+    postConditions.push(eq(posts.status, "ACTIVE"));
+  } else {
+    // Los moderadores ven ACTIVE y HIDDEN, pero no DELETED
+    postConditions.push(sql`${posts.status} != 'DELETED'`);
+  }
+
+  const dbPosts = await db
+    .select({
+      id: posts.id,
+      title: posts.title,
+      content: posts.content,
+      postType: posts.postType,
+      category: posts.category,
+      tags: posts.tags,
+      status: posts.status,
+      createdAt: posts.createdAt,
+      authorId: posts.authorId,
+      authorName: profiles.displayName,
+      authorAvatar: profiles.avatarUrl,
+      authorReputation: userReputation.score,
+    })
+    .from(posts)
+    .innerJoin(profiles, eq(profiles.userId, posts.authorId))
+    .leftJoin(userReputation, eq(userReputation.userId, posts.authorId))
+    .where(and(...postConditions))
+    .orderBy(desc(posts.createdAt));
 
   const getPrivacyIcon = () => {
     switch (community.privacyType) {
@@ -120,7 +172,7 @@ export default async function CommunityDetailPage({ params }: Props) {
         <span>Volver a Explorar</span>
       </Link>
 
-      {/* Header Banner - Sutil gradiente oscuro */}
+      {/* Header Banner - Gradiente premium */}
       <div className="h-40 w-full rounded-3xl bg-gradient-to-r from-neutral-950 via-neutral-900 to-neutral-950 border border-neutral-900 relative overflow-hidden flex items-end p-6">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_60%_at_50%_-10%,rgba(120,119,198,0.08),rgba(255,255,255,0))]" />
         
@@ -185,20 +237,60 @@ export default async function CommunityDetailPage({ params }: Props) {
       ) : (
         /* Caso: Sí tiene acceso */
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 text-left mt-2">
+          
           {/* COLUMNA PRINCIPAL: Feed de posts */}
           <div className="lg:col-span-2 flex flex-col gap-6">
             <div className="flex items-center justify-between border-b border-neutral-900 pb-4">
               <span className="text-xs font-semibold text-neutral-400 tracking-wider uppercase">Publicaciones</span>
+              
+              {/* Botón de Nueva Publicación */}
+              {currentUser && (isJoined || isGlobalAdmin) && (
+                <Link
+                  href={`/app/r/${community.slug}/new`}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-neutral-900 border border-neutral-800 text-neutral-200 px-3 py-1.5 text-xs font-semibold hover:bg-neutral-800 hover:text-white transition-all cursor-pointer"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Publicar</span>
+                </Link>
+              )}
             </div>
 
-            {/* Empty state premium de posts */}
-            <div className="flex flex-col items-center justify-center py-24 text-center border border-dashed border-neutral-900 rounded-3xl bg-neutral-950/20 px-6">
-              <Inbox className="h-10 w-10 text-neutral-700 mb-4" />
-              <h3 className="text-sm font-semibold text-neutral-300">Aún no hay publicaciones</h3>
-              <p className="text-xs text-neutral-500 max-w-sm mt-1 font-light leading-relaxed">
-                Sé el primero en iniciar una conversación compartiendo un aporte o realizando una pregunta en esta comunidad.
-              </p>
-            </div>
+            {/* Listado de posts */}
+            {dbPosts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-24 text-center border border-dashed border-neutral-900 rounded-3xl bg-neutral-950/20 px-6">
+                <Inbox className="h-10 w-10 text-neutral-700 mb-4" />
+                <h3 className="text-sm font-semibold text-neutral-300">Aún no hay publicaciones</h3>
+                <p className="text-xs text-neutral-500 max-w-sm mt-1 font-light leading-relaxed">
+                  Sé el primero en iniciar una conversación compartiendo un aporte o realizando una pregunta en esta comunidad.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {dbPosts.map((post) => (
+                  <PostCard
+                    key={post.id}
+                    id={post.id}
+                    title={post.title}
+                    content={post.content}
+                    communitySlug={community.slug}
+                    communityName={community.displayName}
+                    authorId={post.authorId}
+                    authorName={post.authorName}
+                    authorAvatar={post.authorAvatar || undefined}
+                    authorReputation={post.authorReputation || 0}
+                    category={post.category || undefined}
+                    tags={post.tags}
+                    createdAt={timeAgo(post.createdAt)}
+                    upvotesCount={0}
+                    commentsCount={0}
+                    postType={post.postType as any}
+                    status={post.status as any}
+                    currentUserId={currentUser?.id}
+                    canModerate={canModerate}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* COLUMNA LATERAL: Detalles y Reglas */}

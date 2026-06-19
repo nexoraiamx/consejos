@@ -1,0 +1,1 @@
+ALTER TABLE "posts" ADD COLUMN "post_type" varchar(50) DEFAULT 'DISCUSSION' NOT NULL;
