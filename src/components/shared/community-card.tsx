@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
-import { Users, Globe, Lock, ShieldAlert, ChevronRight } from "lucide-react";
+import { Users, Globe, Lock, ShieldAlert, ChevronRight, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
+import { toggleJoinCommunityAction } from "@/app/actions/communities";
 
 export interface CommunityCardProps {
   id: string;
@@ -13,9 +14,11 @@ export interface CommunityCardProps {
   privacyType: "PUBLIC" | "PRIVATE" | "INVITE_ONLY";
   membersCount: number;
   isJoined?: boolean;
+  membershipStatus?: "APPROVED" | "PENDING" | "BANNED" | null;
 }
 
 export function CommunityCard({
+  id,
   slug,
   displayName,
   description,
@@ -23,18 +26,39 @@ export function CommunityCard({
   privacyType,
   membersCount: initialMembers,
   isJoined: initialJoined = false,
+  membershipStatus: initialStatus = null,
 }: CommunityCardProps) {
   const [isJoined, setIsJoined] = useState(initialJoined);
+  const [status, setStatus] = useState<"APPROVED" | "PENDING" | "BANNED" | null>(initialStatus);
   const [members, setMembers] = useState(initialMembers);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleJoinToggle = (e: React.MouseEvent) => {
-    e.preventDefault(); // Prevent navigating to community page when clicking Join
-    if (isJoined) {
-      setMembers(prev => prev - 1);
-      setIsJoined(false);
-    } else {
-      setMembers(prev => prev + 1);
-      setIsJoined(true);
+  const handleJoinToggle = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (isLoading) return;
+
+    setIsLoading(true);
+    try {
+      const res = await toggleJoinCommunityAction(id);
+      if (res.success) {
+        // En base a la respuesta del servidor actualizamos estado local
+        setIsJoined(res.joined || false);
+        setStatus((res.status as "APPROVED" | "PENDING" | "BANNED" | null) || null);
+        
+        // Ajustar contador local de miembros
+        if (res.joined) {
+          setMembers((prev) => prev + 1);
+        } else if (res.joined === false && status === "APPROVED") {
+          setMembers((prev) => Math.max(0, prev - 1));
+        }
+      } else {
+        alert(res.error || "No se pudo cambiar el estado de membresía.");
+      }
+    } catch (error) {
+      console.error("Error en toggleJoinCommunityAction:", error);
+      alert("Ocurrió un error inesperado al intentar unirse.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -58,6 +82,13 @@ export function CommunityCard({
       case "INVITE_ONLY":
         return "Sólo Invitación";
     }
+  };
+
+  const getButtonText = () => {
+    if (isLoading) return <Loader2 className="h-3.5 w-3.5 animate-spin" />;
+    if (status === "PENDING") return "Pendiente";
+    if (isJoined) return "Miembro";
+    return "Unirse";
   };
 
   return (
@@ -92,19 +123,22 @@ export function CommunityCard({
         {/* Join button */}
         <button
           onClick={handleJoinToggle}
-          className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-all cursor-pointer ${
-            isJoined
+          disabled={isLoading || status === "BANNED"}
+          className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer min-w-[76px] flex items-center justify-center ${
+            status === "PENDING"
+              ? "bg-neutral-900 border border-neutral-850 text-neutral-500 hover:text-neutral-400"
+              : isJoined
               ? "bg-neutral-900 border border-neutral-800 text-neutral-400 hover:bg-neutral-800 hover:text-white"
               : "bg-white text-neutral-950 hover:bg-neutral-200"
-          }`}
+          } disabled:opacity-50`}
         >
-          {isJoined ? "Miembro" : "Unirse"}
+          {getButtonText()}
         </button>
       </div>
 
       {/* Description */}
-      <p className="text-xs text-neutral-400 font-light leading-relaxed line-clamp-2">
-        {description}
+      <p className="text-xs text-neutral-400 font-light leading-relaxed line-clamp-2 min-h-[32px]">
+        {description || "Sin descripción proporcionada."}
       </p>
 
       {/* Footer Info */}

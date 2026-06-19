@@ -1,103 +1,73 @@
-"use client";
+import { db } from "@/db";
+import { communities, communityMembers } from "@/db/schema";
+import { eq, and, isNull, sql } from "drizzle-orm";
+import { getCurrentUser } from "@/lib/auth-helpers";
+import ExploreClient from "./explore-client";
 
-import React, { useState } from "react";
-import { CommunityCard } from "@/components/shared/community-card";
-import { Search, Compass, Grid, Laptop, BookOpen } from "lucide-react";
+// Forzar renderizado dinámico para leer siempre los datos más recientes de la base de datos
+export const dynamic = "force-dynamic";
 
-export default function ExplorePage() {
-  const mockCommunities = [
-    {
-      id: "comm_1",
-      slug: "diseno",
-      displayName: "Diseño & UX",
-      description: "Espacio premium para discutir tendencias, tipografías, interfaces y sistemas de diseño elegantes.",
-      privacyType: "PUBLIC" as const,
-      membersCount: 1240,
-      isJoined: true,
-    },
-    {
-      id: "comm_2",
-      slug: "inteligencia-artificial",
-      displayName: "Inteligencia Artificial",
-      description: "Comunidad especializada en modelos de lenguaje, automatización de código y agentes autónomos.",
-      privacyType: "INVITE_ONLY" as const,
-      membersCount: 840,
-      isJoined: false,
-    },
-    {
-      id: "comm_3",
-      slug: "desarrollo",
-      displayName: "Desarrollo Web",
-      description: "React, Next.js, Drizzle, bases de datos serverless y optimización de rendimiento a fondo.",
-      privacyType: "PUBLIC" as const,
-      membersCount: 2310,
-      isJoined: false,
-    },
-    {
-      id: "comm_4",
-      slug: "finanzas",
-      displayName: "Finanzas Personales",
-      description: "Inversión, ahorro inteligente, e-commerce y criptomonedas para profesionales de tecnología.",
-      privacyType: "PRIVATE" as const,
-      membersCount: 420,
-      isJoined: false,
-    },
-  ];
+export default async function ExplorePage() {
+  const user = await getCurrentUser();
 
-  const categories = [
-    { name: "Todos", icon: Grid },
-    { name: "Tecnología", icon: Laptop },
-    { name: "Diseño", icon: Compass },
-    { name: "Recursos", icon: BookOpen },
-  ];
+  // 1. Consultar todas las comunidades activas (no eliminadas)
+  const dbCommunities = await db
+    .select({
+      id: communities.id,
+      slug: communities.slug,
+      displayName: communities.displayName,
+      description: communities.description,
+      privacyType: communities.privacyType,
+      createdAt: communities.createdAt,
+    })
+    .from(communities)
+    .where(isNull(communities.deletedAt))
+    .orderBy(communities.createdAt);
 
-  const [activeCategory, setActiveCategory] = useState("Todos");
+  // 2. Construir la metadata de membresías y cantidad de miembros de forma paralela
+  const communitiesWithMeta = await Promise.all(
+    dbCommunities.map(async (comm) => {
+      // Contador de miembros con estatus APPROVED
+      const [countResult] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(communityMembers)
+        .where(
+          and(
+            eq(communityMembers.communityId, comm.id),
+            eq(communityMembers.status, "APPROVED")
+          )
+        );
 
-  return (
-    <div className="flex-1 w-full max-w-5xl mx-auto px-6 py-8 flex flex-col gap-8 text-left">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-heading font-semibold text-neutral-100 tracking-tight">
-          Explorar
-        </h1>
-        <p className="text-sm text-neutral-400 font-light leading-relaxed">
-          Descubre nuevos espacios de conocimiento y únete a discusiones del más alto nivel.
-        </p>
-      </div>
+      let isJoined = false;
+      let membershipStatus: "APPROVED" | "PENDING" | "BANNED" | null = null;
 
-      {/* Barra de búsqueda premium */}
-      <div className="relative w-full max-w-lg">
-        <Search className="absolute left-4 top-3.5 h-4 w-4 text-neutral-500" />
-        <input
-          type="text"
-          placeholder="Buscar comunidades, temas o etiquetas..."
-          className="w-full pl-11 pr-4 py-3 bg-neutral-900 border border-neutral-850 rounded-2xl text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-neutral-700 transition-colors font-light"
-        />
-      </div>
+      // Si hay un usuario logueado, consultar si tiene membresía en esta comunidad
+      if (user) {
+        const membership = await db.query.communityMembers.findFirst({
+          where: and(
+            eq(communityMembers.communityId, comm.id),
+            eq(communityMembers.userId, user.id)
+          ),
+        });
 
-      {/* Categorías (Tags) */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-        {categories.map((cat) => (
-          <button
-            key={cat.name}
-            onClick={() => setActiveCategory(cat.name)}
-            className={`inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-              activeCategory === cat.name
-                ? "bg-white border-white text-neutral-950"
-                : "bg-neutral-950 border-neutral-900 text-neutral-400 hover:text-white hover:border-neutral-800"
-            }`}
-          >
-            <cat.icon className="h-3.5 w-3.5" />
-            <span>{cat.name}</span>
-          </button>
-        ))}
-      </div>
+        if (membership) {
+          isJoined = membership.status === "APPROVED";
+          membershipStatus = membership.status as "APPROVED" | "PENDING" | "BANNED";
+        }
+      }
 
-      {/* Grid de Comunidades */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
-        {mockCommunities.map((community) => (
-          <CommunityCard key={community.id} {...community} />
-        ))}
-      </div>
-    </div>
+      return {
+        id: comm.id,
+        slug: comm.slug,
+        displayName: comm.displayName,
+        description: comm.description || "",
+        privacyType: comm.privacyType as "PUBLIC" | "PRIVATE" | "INVITE_ONLY",
+        membersCount: countResult?.count || 0,
+        isJoined,
+        membershipStatus,
+      };
+    })
   );
+
+  return <ExploreClient initialCommunities={communitiesWithMeta} />;
 }
