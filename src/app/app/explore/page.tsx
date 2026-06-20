@@ -16,6 +16,10 @@ export default async function ExplorePage() {
     description: string | null;
     privacyType: string;
     createdAt: Date;
+    avatarUrl: string | null;
+    bannerUrl: string | null;
+    logoUrl: string | null;
+    category: string | null;
   }[] = [];
 
   let showPreferencesCTA = false;
@@ -46,6 +50,10 @@ export default async function ExplorePage() {
         description: communities.description,
         privacyType: communities.privacyType,
         createdAt: communities.createdAt,
+        avatarUrl: communities.avatarUrl,
+        bannerUrl: communities.bannerUrl,
+        logoUrl: communities.logoUrl,
+        category: communities.category,
       })
       .from(communities)
       .where(isNull(communities.deletedAt))
@@ -115,6 +123,10 @@ export default async function ExplorePage() {
         displayName: comm.displayName || "Comunidad sin nombre",
         description: comm.description || "",
         privacyType: (comm.privacyType || "PUBLIC") as "PUBLIC" | "PRIVATE" | "INVITE_ONLY",
+        avatarUrl: comm.avatarUrl || null,
+        bannerUrl: comm.bannerUrl || null,
+        logoUrl: comm.logoUrl || null,
+        category: comm.category || null,
         membersCount,
         isJoined,
         membershipStatus,

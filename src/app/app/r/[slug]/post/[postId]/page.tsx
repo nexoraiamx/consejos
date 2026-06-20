@@ -96,6 +96,7 @@ export default async function PostDetailPage({ params }: Props) {
   // 3. Validar accesibilidad de privacidad
   let isJoined = false;
   let membershipStatus: string | null = null;
+  let userRole: string | null = null;
   
   if (currentUser) {
     const membership = await db.query.communityMembers.findFirst({
@@ -108,6 +109,7 @@ export default async function PostDetailPage({ params }: Props) {
       const statusUpper = membership.status.toUpperCase();
       isJoined = statusUpper === "APPROVED";
       membershipStatus = statusUpper;
+      userRole = membership.role;
     } else {
       const joinRequest = await db.query.joinRequests.findFirst({
         where: and(
@@ -142,6 +144,46 @@ export default async function PostDetailPage({ params }: Props) {
         </Link>
       </div>
     );
+  }
+
+  // Calcular si el usuario actual es moderador o administrador local
+  let canModerate = isGlobalAdmin;
+  if (currentUser && !isGlobalAdmin && userRole) {
+    const roleLower = userRole.toLowerCase();
+    if (
+      (roleLower === "owner" || roleLower === "community_admin" || roleLower === "moderator") &&
+      membershipStatus === "APPROVED"
+    ) {
+      canModerate = true;
+    }
+  }
+
+  // Si el post está oculto (HIDDEN), validar que el usuario sea moderador/administrador local o administrador global
+  const isPostHidden = postResult.status === "HIDDEN";
+  const canViewHiddenPost = canModerate || isGlobalAdmin;
+  
+  if (isPostHidden && !canViewHiddenPost) {
+    return (
+      <div className="flex-1 w-full max-w-md mx-auto px-6 py-20 flex flex-col items-center justify-center text-center gap-4">
+        <div className="h-12 w-12 rounded-2xl bg-yellow-950/20 border border-yellow-900/40 flex items-center justify-center text-yellow-500">
+          <EyeOff className="h-5 w-5 text-yellow-500" />
+        </div>
+        <h3 className="text-base font-semibold text-neutral-200">Publicación Oculta</h3>
+        <p className="text-xs text-neutral-500 font-light leading-relaxed">
+          Esta publicación ha sido oculta por moderación. Solo los administradores o moderadores pueden visualizarla.
+        </p>
+        <Link
+          href={`/app/r/${slug}`}
+          className="rounded-full bg-neutral-900 border border-neutral-800 text-neutral-300 px-4 py-2 text-xs font-semibold hover:bg-neutral-800 transition-colors mt-2"
+        >
+          Volver a r/{slug}
+        </Link>
+      </div>
+    );
+  }
+
+  if (postResult.status === "DELETED") {
+    notFound();
   }
 
   // 4. Obtener comentarios del post
@@ -193,24 +235,6 @@ export default async function PostDetailPage({ params }: Props) {
           )
         )
     : [];
-
-  // Calcular si el usuario actual es moderador o administrador local
-  let canModerate = isGlobalAdmin;
-  if (currentUser && !isGlobalAdmin) {
-    const membership = await db.query.communityMembers.findFirst({
-      where: and(
-        eq(communityMembers.communityId, community.id),
-        eq(communityMembers.userId, currentUser.id)
-      ),
-    });
-    if (
-      membership &&
-      (membership.role.toLowerCase() === "owner" || membership.role === "COMMUNITY_ADMIN" || membership.role === "MODERATOR") &&
-      membership.status.toUpperCase() === "APPROVED"
-    ) {
-      canModerate = true;
-    }
-  }
 
   const formattedComments = dbComments.map((c) => ({
     id: c.id,

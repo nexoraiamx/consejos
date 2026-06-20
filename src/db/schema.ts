@@ -59,8 +59,10 @@ export const communities = pgTable(
     displayName: varchar("display_name", { length: 100 }).notNull(),
     description: text("description"),
     logoUrl: varchar("logo_url", { length: 512 }),
+    avatarUrl: varchar("avatar_url", { length: 512 }),
     bannerUrl: varchar("banner_url", { length: 512 }),
     privacyType: varchar("privacy_type", { length: 50 }).default("PUBLIC").notNull(), // 'PUBLIC', 'PRIVATE', 'INVITE_ONLY'
+    category: varchar("category", { length: 256 }),
     creatorId: varchar("creator_id", { length: 256 }).references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),

@@ -10,11 +10,14 @@ export interface CommunityCardProps {
   slug: string;
   displayName: string;
   description: string;
-  logoUrl?: string;
+  logoUrl?: string | null;
+  avatarUrl?: string | null;
+  bannerUrl?: string | null;
   privacyType: "PUBLIC" | "PRIVATE" | "INVITE_ONLY";
   membersCount: number;
   isJoined?: boolean;
   membershipStatus?: "APPROVED" | "PENDING" | "BANNED" | null;
+  category?: string | null;
 }
 
 export function CommunityCard({
@@ -23,10 +26,13 @@ export function CommunityCard({
   displayName,
   description,
   logoUrl,
+  avatarUrl,
+  bannerUrl,
   privacyType,
   membersCount: initialMembers,
   isJoined: initialJoined = false,
   membershipStatus: initialStatus = null,
+  category,
 }: CommunityCardProps) {
   const [isJoined, setIsJoined] = useState(initialJoined);
   const [status, setStatus] = useState<"APPROVED" | "PENDING" | "BANNED" | null>(initialStatus);
@@ -35,7 +41,7 @@ export function CommunityCard({
 
   const handleJoinToggle = async (e: React.MouseEvent) => {
     e.preventDefault();
-    if (isLoading) return;
+    if (isLoading || (privacyType === "INVITE_ONLY" && !isJoined)) return;
 
     setIsLoading(true);
     try {
@@ -86,10 +92,16 @@ export function CommunityCard({
 
   const getButtonText = () => {
     if (isLoading) return <Loader2 className="h-3.5 w-3.5 animate-spin" />;
-    if (status === "PENDING") return "Pendiente";
-    if (isJoined) return "Miembro";
+    if (isJoined) return "Abandonar";
+    if (status === "PENDING") {
+      return privacyType === "PRIVATE" ? "Cancelar" : "Pendiente";
+    }
+    if (privacyType === "PRIVATE") return "Solicitar";
+    if (privacyType === "INVITE_ONLY") return "Solo invitación";
     return "Unirse";
   };
+
+  const isButtonDisabled = isLoading || status === "BANNED" || (privacyType === "INVITE_ONLY" && !isJoined);
 
   return (
     <motion.div
@@ -101,9 +113,9 @@ export function CommunityCard({
       {/* Header Info */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          {logoUrl ? (
+          {avatarUrl || logoUrl ? (
             <img
-              src={logoUrl}
+              src={avatarUrl || logoUrl || undefined}
               alt={displayName}
               className="h-10 w-10 rounded-full border border-neutral-800 object-cover"
             />
@@ -123,12 +135,14 @@ export function CommunityCard({
         {/* Join button */}
         <button
           onClick={handleJoinToggle}
-          disabled={isLoading || status === "BANNED"}
-          className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer min-w-[76px] flex items-center justify-center ${
+          disabled={isButtonDisabled}
+          className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all cursor-pointer min-w-[84px] shrink-0 flex items-center justify-center ${
             status === "PENDING"
               ? "bg-neutral-900 border border-neutral-850 text-neutral-500 hover:text-neutral-400"
               : isJoined
-              ? "bg-neutral-900 border border-neutral-800 text-neutral-400 hover:bg-neutral-800 hover:text-white"
+              ? "bg-neutral-900 border border-neutral-800 text-red-450 hover:bg-red-950/20 hover:text-red-400 hover:border-red-900/50"
+              : privacyType === "INVITE_ONLY"
+              ? "bg-neutral-900/50 border border-neutral-900 text-neutral-600 cursor-not-allowed"
               : "bg-white text-neutral-950 hover:bg-neutral-200"
           } disabled:opacity-50`}
         >
@@ -152,6 +166,11 @@ export function CommunityCard({
             {getPrivacyIcon()}
             <span>{getPrivacyText()}</span>
           </span>
+          {category && (
+            <span className="inline-flex items-center rounded-full bg-neutral-900 px-2.5 py-0.5 text-[9px] font-medium text-neutral-400 border border-neutral-850">
+              {category}
+            </span>
+          )}
         </div>
 
         <a

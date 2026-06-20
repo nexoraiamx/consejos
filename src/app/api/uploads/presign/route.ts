@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth-helpers";
+import { getCurrentUser, canManageCommunity } from "@/lib/auth-helpers";
 import { db } from "@/db";
 import { communityMembers, communities } from "@/db/schema";
 import { eq, and, isNull, or } from "drizzle-orm";
@@ -39,49 +39,66 @@ export async function POST(req: NextRequest) {
     } = body;
 
     // Validar campos obligatorios
-    if (!communityId) {
+    if (targetType !== "POST" && targetType !== "COMMENT" && targetType !== "COMMUNITY") {
+      return NextResponse.json({ error: "El campo targetType debe ser POST, COMMENT o COMMUNITY." }, { status: 400 });
+    }
+    if (!communityId && targetType !== "COMMUNITY") {
       return NextResponse.json({ error: "El campo communityId es obligatorio." }, { status: 400 });
     }
-    if (targetType !== "POST" && targetType !== "COMMENT") {
-      return NextResponse.json({ error: "El campo targetType debe ser POST o COMMENT." }, { status: 400 });
-    }
-    if (!targetId && !uploadSessionId) {
+    if (!targetId && !uploadSessionId && targetType !== "COMMUNITY") {
       return NextResponse.json({ error: "Se requiere targetId o uploadSessionId." }, { status: 400 });
     }
     if (!fileName || !fileSize || !mimeType) {
       return NextResponse.json({ error: "fileName, fileSize y mimeType son obligatorios." }, { status: 400 });
     }
 
-    // 4. Validar existencia de la comunidad
-    const community = await db.query.communities.findFirst({
-      where: and(
-        eq(communities.id, communityId),
-        isNull(communities.deletedAt)
-      ),
-    });
-    if (!community) {
-      return NextResponse.json({ error: "La comunidad especificada no existe." }, { status: 404 });
+    // 4. Validar existencia de la comunidad (solo si communityId está presente)
+    let community = null;
+    if (communityId) {
+      community = await db.query.communities.findFirst({
+        where: and(
+          eq(communities.id, communityId),
+          isNull(communities.deletedAt)
+        ),
+      });
+      if (!community) {
+        return NextResponse.json({ error: "La comunidad especificada no existe." }, { status: 404 });
+      }
     }
 
     // 5. Validar membresía aprobada o rol GLOBAL_ADMIN
     const isGlobalAdmin = user.globalRole === "GLOBAL_ADMIN";
     if (!isGlobalAdmin) {
-      const membership = await db.query.communityMembers.findFirst({
-        where: and(
-          eq(communityMembers.communityId, communityId),
-          eq(communityMembers.userId, user.id),
-          or(
-            eq(communityMembers.status, "APPROVED"),
-            eq(communityMembers.status, "approved")
-          )
-        ),
-      });
+      if (targetType === "COMMUNITY") {
+        if (communityId) {
+          // Si es edición, verificar que sea owner o COMMUNITY_ADMIN
+          const hasPerm = await canManageCommunity(user.id, communityId);
+          if (!hasPerm) {
+            return NextResponse.json(
+              { error: "Acceso denegado: No tienes permisos de administración en esta comunidad." },
+              { status: 403 }
+            );
+          }
+        }
+        // Si no hay communityId (creación), cualquier usuario autenticado puede subir la imagen temporal
+      } else {
+        const membership = await db.query.communityMembers.findFirst({
+          where: and(
+            eq(communityMembers.communityId, communityId),
+            eq(communityMembers.userId, user.id),
+            or(
+              eq(communityMembers.status, "APPROVED"),
+              eq(communityMembers.status, "approved")
+            )
+          ),
+        });
 
-      if (!membership) {
-        return NextResponse.json(
-          { error: "Acceso denegado: Debes ser miembro aprobado de la comunidad para subir archivos." },
-          { status: 403 }
-        );
+        if (!membership) {
+          return NextResponse.json(
+            { error: "Acceso denegado: Debes ser miembro aprobado de la comunidad para subir archivos." },
+            { status: 403 }
+          );
+        }
       }
     }
 
@@ -92,7 +109,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 7. Generar key de archivo segura
-    const key = generateFileKey(user.id, communityId, targetType, fileName, targetId, uploadSessionId);
+    const key = generateFileKey(user.id, communityId || null, targetType, fileName, targetId, uploadSessionId);
 
     // 8. Generar presigned PUT URL
     const bucketName = process.env.R2_BUCKET_NAME || "dummy-bucket";

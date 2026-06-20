@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { communities, communityMembers, profiles, posts, userReputation, attachments, joinRequests } from "@/db/schema";
+import { communities, communityMembers, profiles, posts, userReputation, attachments, joinRequests, comments } from "@/db/schema";
 import { eq, and, isNull, sql, desc, inArray, or } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { ArrowLeft, Inbox, Globe, Lock, ShieldAlert, Calendar, User, EyeOff, Shield, Plus } from "lucide-react";
@@ -136,6 +136,7 @@ export default async function CommunityDetailPage({ params }: Props) {
       authorName: profiles.displayName,
       authorAvatar: profiles.avatarUrl,
       authorReputation: userReputation.score,
+      commentsCount: sql<number>`(SELECT count(*)::int FROM ${comments} WHERE ${comments.postId} = ${posts.id} AND ${comments.deletedAt} IS NULL AND ${comments.status} = 'ACTIVE')`,
     })
     .from(posts)
     .innerJoin(profiles, eq(profiles.userId, posts.authorId))
@@ -201,14 +202,22 @@ export default async function CommunityDetailPage({ params }: Props) {
         <span>Volver a Explorar</span>
       </Link>
 
-      {/* Header Banner - Gradiente premium */}
-      <div className="h-40 w-full rounded-3xl bg-gradient-to-r from-neutral-950 via-neutral-900 to-neutral-950 border border-neutral-900 relative overflow-hidden flex items-end p-6">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_60%_at_50%_-10%,rgba(120,119,198,0.08),rgba(255,255,255,0))]" />
+      {/* Header Banner - Gradiente premium o imagen de banner */}
+      <div 
+        className="h-40 w-full rounded-3xl border border-neutral-900 relative overflow-hidden flex items-end p-6 bg-neutral-950 bg-cover bg-center"
+        style={community.bannerUrl ? { backgroundImage: `url(${community.bannerUrl})` } : undefined}
+      >
+        <div className="absolute inset-0 bg-gradient-to-t from-neutral-950/90 via-neutral-950/50 to-transparent" />
+        <div className="absolute inset-0 bg-neutral-950/20" />
         
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between w-full gap-4">
           <div className="flex items-center gap-4 text-left">
-            <div className="h-16 w-16 rounded-2xl border border-neutral-800 bg-neutral-950 flex items-center justify-center text-2xl font-bold text-white shadow-xl shadow-black/40">
-              {community.displayName.charAt(0).toUpperCase()}
+            <div className="h-16 w-16 rounded-2xl border border-neutral-800 bg-neutral-950 flex items-center justify-center text-2xl font-bold text-white shadow-xl shadow-black/40 overflow-hidden">
+              {community.avatarUrl ? (
+                <img src={community.avatarUrl} alt={community.displayName} className="h-full w-full object-cover" />
+              ) : (
+                community.displayName.charAt(0).toUpperCase()
+              )}
             </div>
             <div className="flex flex-col">
               <div className="flex items-center gap-2">
@@ -324,7 +333,7 @@ export default async function CommunityDetailPage({ params }: Props) {
                       tags={post.tags}
                       createdAt={timeAgo(post.createdAt)}
                       upvotesCount={0}
-                      commentsCount={0}
+                      commentsCount={post.commentsCount || 0}
                       postType={post.postType as "QUESTION" | "RESOURCE" | "DISCUSSION" | "CASE_STUDY"}
                       status={post.status as "ACTIVE" | "HIDDEN" | "DELETED"}
                       currentUserId={currentUser?.id}

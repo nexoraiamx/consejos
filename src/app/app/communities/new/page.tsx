@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createCommunityAction } from "@/app/actions/communities";
 import { ArrowLeft, Globe, Lock, ShieldAlert, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { ImageUploader } from "@/components/shared/image-uploader";
 
 export default function NewCommunityPage() {
   const router = useRouter();
@@ -12,6 +13,9 @@ export default function NewCommunityPage() {
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
   const [privacyType, setPrivacyType] = useState<"PUBLIC" | "PRIVATE" | "INVITE_ONLY">("PUBLIC");
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [bannerUrl, setBannerUrl] = useState("");
+  const [category, setCategory] = useState("");
   
   const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -43,6 +47,9 @@ export default function NewCommunityPage() {
         slug,
         description,
         privacyType,
+        avatarUrl,
+        bannerUrl,
+        category,
       });
 
       if (res.success) {
@@ -131,6 +138,35 @@ export default function NewCommunityPage() {
             onChange={(e) => setDescription(e.target.value)}
             rows={4}
             className="px-4 py-3 bg-neutral-900 border border-neutral-850 rounded-2xl text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-neutral-700 transition-colors font-light resize-none leading-relaxed"
+          />
+        </div>
+
+        {/* Categoría */}
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-semibold text-neutral-300">Categoría (Opcional)</label>
+          <input
+            type="text"
+            placeholder="e.g. Tecnología, Diseño, Negocios..."
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="px-4 py-3 bg-neutral-900 border border-neutral-850 rounded-2xl text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-neutral-700 transition-colors font-light"
+          />
+          <span className="text-[10px] text-neutral-500">Ayuda a clasificar tu comunidad en los resultados de búsqueda.</span>
+        </div>
+
+        {/* Imágenes (Avatar y Banner) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <ImageUploader
+            label="Avatar de la Comunidad (Logo)"
+            value={avatarUrl}
+            onChange={setAvatarUrl}
+            aspectRatio="square"
+          />
+          <ImageUploader
+            label="Banner de la Comunidad"
+            value={bannerUrl}
+            onChange={setBannerUrl}
+            aspectRatio="video"
           />
         </div>
 

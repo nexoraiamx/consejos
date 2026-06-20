@@ -12,6 +12,9 @@ interface CreateCommunityInput {
   slug: string;
   description: string;
   privacyType: "PUBLIC" | "PRIVATE" | "INVITE_ONLY";
+  avatarUrl?: string;
+  bannerUrl?: string;
+  category?: string;
 }
 
 /**
@@ -59,6 +62,9 @@ export async function createCommunityAction(formData: CreateCommunityInput) {
         description: description || null,
         privacyType,
         creatorId: user.id,
+        avatarUrl: formData.avatarUrl || null,
+        bannerUrl: formData.bannerUrl || null,
+        category: formData.category || null,
       }).returning();
 
       // 2. Unir al creador como owner y approved
@@ -503,7 +509,10 @@ export async function updateCommunitySettingsAction(
   communityId: string, 
   displayName: string, 
   description: string, 
-  privacyType: "PUBLIC" | "PRIVATE" | "INVITE_ONLY"
+  privacyType: "PUBLIC" | "PRIVATE" | "INVITE_ONLY",
+  avatarUrl?: string | null,
+  bannerUrl?: string | null,
+  category?: string | null
 ) {
   const user = await requireAuth();
 
@@ -522,6 +531,9 @@ export async function updateCommunitySettingsAction(
         displayName: displayName.trim(),
         description: description.trim() || null,
         privacyType,
+        avatarUrl: avatarUrl || null,
+        bannerUrl: bannerUrl || null,
+        category: category || null,
         updatedAt: new Date()
       })
       .where(eq(communities.id, communityId));

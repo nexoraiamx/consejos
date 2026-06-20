@@ -26,6 +26,7 @@ import {
   updateCommunitySettingsAction
 } from "@/app/actions/communities";
 import { useRouter } from "next/navigation";
+import { ImageUploader } from "@/components/shared/image-uploader";
 
 interface Member {
   id: string;
@@ -66,6 +67,9 @@ interface AdminClientProps {
     displayName: string;
     description: string | null;
     privacyType: string;
+    avatarUrl?: string | null;
+    bannerUrl?: string | null;
+    category?: string | null;
   };
   initialMembers: Member[];
   initialRequests: Request[];
@@ -94,6 +98,9 @@ export default function AdminClient({
   const [privacyType, setPrivacyType] = useState<"PUBLIC" | "PRIVATE" | "INVITE_ONLY">(
     community.privacyType as "PUBLIC" | "PRIVATE" | "INVITE_ONLY"
   );
+  const [avatarUrl, setAvatarUrl] = useState(community.avatarUrl || "");
+  const [bannerUrl, setBannerUrl] = useState(community.bannerUrl || "");
+  const [category, setCategory] = useState(community.category || "");
   
   // UI States
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
@@ -224,7 +231,15 @@ export default function AdminClient({
     }
     setIsSavingSettings(true);
     try {
-      const res = await updateCommunitySettingsAction(community.id, displayName, description, privacyType);
+      const res = await updateCommunitySettingsAction(
+        community.id, 
+        displayName, 
+        description, 
+        privacyType,
+        avatarUrl,
+        bannerUrl,
+        category
+      );
       if (res.success) {
         alert("Configuración guardada correctamente.");
         router.refresh();
@@ -627,6 +642,39 @@ export default function AdminClient({
                 onChange={(e) => setDescription(e.target.value)}
                 className="w-full rounded-2xl bg-neutral-950 border border-neutral-900 px-4 py-3 text-xs font-medium text-white placeholder-neutral-600 focus:outline-none focus:border-neutral-700 transition-all resize-none leading-relaxed"
                 placeholder="Describe el propósito del espacio..."
+              />
+            </div>
+
+            {/* Categoría */}
+            <div className="flex flex-col gap-2">
+              <label htmlFor="category" className="text-xs font-semibold text-neutral-400">
+                Categoría (Opcional)
+              </label>
+              <input
+                id="category"
+                type="text"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full rounded-2xl bg-neutral-950 border border-neutral-900 px-4 py-3 text-xs font-medium text-white placeholder-neutral-600 focus:outline-none focus:border-neutral-700 transition-all"
+                placeholder="Ej. Tecnología, Diseño, Negocios..."
+              />
+            </div>
+
+            {/* Imágenes */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <ImageUploader
+                label="Avatar de la Comunidad"
+                value={avatarUrl}
+                onChange={setAvatarUrl}
+                communityId={community.id}
+                aspectRatio="square"
+              />
+              <ImageUploader
+                label="Banner de la Comunidad"
+                value={bannerUrl}
+                onChange={setBannerUrl}
+                communityId={community.id}
+                aspectRatio="video"
               />
             </div>
 

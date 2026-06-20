@@ -110,8 +110,8 @@ export function validateFile(fileName: string, fileSize: number, mimeType: strin
  */
 export function generateFileKey(
   userId: string,
-  communityId: string,
-  targetType: "POST" | "COMMENT",
+  communityId: string | null,
+  targetType: "POST" | "COMMENT" | "COMMUNITY",
   fileName: string,
   targetId?: string,
   uploadSessionId?: string
@@ -120,12 +120,21 @@ export function generateFileKey(
   const sanitizedName = fileName.replace(/[^a-zA-Z0-9.-]/g, "_");
   const randomUuid = crypto.randomUUID();
 
+  if (targetType === "COMMUNITY") {
+    if (communityId) {
+      return `uploads/${userId}/communities/${communityId}/${randomUuid}-${sanitizedName}`;
+    } else {
+      return `uploads/${userId}/communities/new/${randomUuid}-${sanitizedName}`;
+    }
+  }
+
+  const commId = communityId || "unknown";
   if (targetId) {
     // Existing post/comment
-    return `uploads/${userId}/${communityId}/${targetType.toLowerCase()}/${targetId}/${randomUuid}-${sanitizedName}`;
+    return `uploads/${userId}/${commId}/${targetType.toLowerCase()}/${targetId}/${randomUuid}-${sanitizedName}`;
   } else {
     // Draft / New post/comment
     const session = uploadSessionId || crypto.randomUUID();
-    return `uploads/${userId}/${communityId}/drafts/${session}/${randomUuid}-${sanitizedName}`;
+    return `uploads/${userId}/${commId}/drafts/${session}/${randomUuid}-${sanitizedName}`;
   }
 }

@@ -14,6 +14,10 @@ interface CommunityData {
   membersCount: number;
   isJoined: boolean;
   membershipStatus: "APPROVED" | "PENDING" | "BANNED" | null;
+  avatarUrl?: string | null;
+  bannerUrl?: string | null;
+  logoUrl?: string | null;
+  category?: string | null;
 }
 
 export default function ExploreClient({
@@ -33,25 +37,37 @@ export default function ExploreClient({
     { name: "Recursos", icon: BookOpen },
   ];
 
-  // Filtros heurísticos locales según palabras clave en slug y descripción
+  // Filtros heurísticos locales según palabras clave en slug, descripción y categoría real
   const filteredCommunities = (initialCommunities || []).filter((comm) => {
     const matchesSearch =
       comm.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       comm.slug.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (comm.description || "").toLowerCase().includes(searchQuery.toLowerCase());
+      (comm.description || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (comm.category || "").toLowerCase().includes(searchQuery.toLowerCase());
 
     if (!matchesSearch) return false;
     if (activeCategory === "Todos") return true;
 
+    const commCategoryLower = (comm.category || "").toLowerCase();
+
     if (activeCategory === "Tecnología") {
+      if (commCategoryLower.includes("desarrollo") || commCategoryLower.includes("ia") || commCategoryLower.includes("tech") || commCategoryLower.includes("web") || commCategoryLower.includes("model")) {
+        return true;
+      }
       const keys = ["tech", "dev", "ia", "artificial", "model", "llm", "desarrollo", "nextjs", "db", "drizzle", "react", "código", "programacion"];
       return keys.some(k => comm.slug.includes(k) || (comm.description || "").toLowerCase().includes(k));
     }
     if (activeCategory === "Diseño") {
+      if (commCategoryLower.includes("diseño") || commCategoryLower.includes("design") || commCategoryLower.includes("creatividad") || commCategoryLower.includes("ux") || commCategoryLower.includes("ui")) {
+        return true;
+      }
       const keys = ["diseno", "design", "ux", "ui", "tipografía", "interfaz", "interacciones", "estética", "visual"];
       return keys.some(k => comm.slug.includes(k) || (comm.description || "").toLowerCase().includes(k));
     }
     if (activeCategory === "Recursos") {
+      if (commCategoryLower.includes("recursos") || commCategoryLower.includes("negocios") || commCategoryLower.includes("finanzas") || commCategoryLower.includes("legal") || commCategoryLower.includes("productividad")) {
+        return true;
+      }
       const keys = ["finanzas", "recursos", "inversión", "ahorro", "libro", "guía", "tutorial", "e-commerce"];
       return keys.some(k => comm.slug.includes(k) || (comm.description || "").toLowerCase().includes(k));
     }

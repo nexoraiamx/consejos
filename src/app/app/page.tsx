@@ -28,7 +28,7 @@ const timeAgo = (date: Date) => {
 export default async function AppDashboard() {
   const currentUser = await getCurrentUser();
 
-  // 1. Consultar posts reales de Neon con leftJoins robustos
+  // 1. Consultar posts reales de Neon con leftJoins robustos y filtrado por privacidad
   let dbPosts: {
     id: string;
     title: string;
@@ -47,6 +47,64 @@ export default async function AppDashboard() {
     commentsCount: number;
   }[] = [];
   try {
+    const currentUserId = currentUser?.id || "";
+    const isGlobalAdmin = currentUser?.globalRole === "GLOBAL_ADMIN";
+
+    const whereClause = isGlobalAdmin
+      ? and(
+          isNull(posts.deletedAt),
+          isNull(communities.deletedAt),
+          or(
+            eq(posts.status, "ACTIVE"),
+            eq(posts.status, "HIDDEN")
+          )
+        )
+      : and(
+          isNull(posts.deletedAt),
+          isNull(communities.deletedAt),
+          or(
+            // Public active posts
+            and(
+              eq(posts.status, "ACTIVE"),
+              eq(communities.privacyType, "PUBLIC")
+            ),
+            // Private or invite-only active posts where user is approved member
+            and(
+              eq(posts.status, "ACTIVE"),
+              or(
+                eq(communities.privacyType, "PRIVATE"),
+                eq(communities.privacyType, "INVITE_ONLY")
+              ),
+              or(
+                eq(communityMembers.status, "APPROVED"),
+                eq(communityMembers.status, "approved")
+              )
+            ),
+            // Hidden posts where user is owner, community admin, moderator, or community creator
+            currentUser
+              ? and(
+                  eq(posts.status, "HIDDEN"),
+                  or(
+                    and(
+                      or(
+                        eq(communityMembers.role, "owner"),
+                        eq(communityMembers.role, "COMMUNITY_ADMIN"),
+                        eq(communityMembers.role, "community_admin"),
+                        eq(communityMembers.role, "MODERATOR"),
+                        eq(communityMembers.role, "moderator")
+                      ),
+                      or(
+                        eq(communityMembers.status, "APPROVED"),
+                        eq(communityMembers.status, "approved")
+                      )
+                    ),
+                    eq(communities.creatorId, currentUser.id)
+                  )
+                )
+              : sql`false`
+          )
+        );
+
     dbPosts = await db
       .select({
         id: posts.id,
@@ -69,13 +127,14 @@ export default async function AppDashboard() {
       .innerJoin(communities, eq(posts.communityId, communities.id))
       .leftJoin(profiles, eq(profiles.userId, posts.authorId))
       .leftJoin(userReputation, eq(userReputation.userId, posts.authorId))
-      .where(
+      .leftJoin(
+        communityMembers,
         and(
-          eq(posts.status, "ACTIVE"),
-          isNull(posts.deletedAt),
-          isNull(communities.deletedAt)
+          eq(communityMembers.communityId, posts.communityId),
+          eq(communityMembers.userId, currentUserId)
         )
       )
+      .where(whereClause)
       .orderBy(desc(posts.createdAt))
       .limit(20);
   } catch (error) {
@@ -108,6 +167,8 @@ export default async function AppDashboard() {
     displayName: string;
     description: string | null;
     privacyType: string;
+    avatarUrl: string | null;
+    category: string | null;
   }[] = [];
   try {
     dbCommunities = await db
@@ -117,6 +178,8 @@ export default async function AppDashboard() {
         displayName: communities.displayName,
         description: communities.description,
         privacyType: communities.privacyType,
+        avatarUrl: communities.avatarUrl,
+        category: communities.category,
       })
       .from(communities)
       .where(isNull(communities.deletedAt))
@@ -182,6 +245,8 @@ export default async function AppDashboard() {
         displayName: comm.displayName || "Comunidad sin nombre",
         description: comm.description || "",
         privacyType: (comm.privacyType || "PUBLIC") as "PUBLIC" | "PRIVATE" | "INVITE_ONLY",
+        avatarUrl: comm.avatarUrl || null,
+        category: comm.category || null,
         membersCount,
         isJoined,
         membershipStatus,
