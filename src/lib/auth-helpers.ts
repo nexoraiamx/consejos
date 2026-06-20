@@ -1,6 +1,6 @@
 import { auth, currentUser as getClerkUser } from "@clerk/nextjs/server";
 import { db, poolDb } from "@/db";
-import { users, profiles, userReputation, communityMembers } from "@/db/schema";
+import { users, profiles, userReputation, communityMembers, communities } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { redirect } from "next/navigation";
 
@@ -111,16 +111,44 @@ export async function requireAuth() {
  */
 export async function getUserCommunityRole(userId: string, communityId: string) {
   try {
-    const member = await db.query.communityMembers.findFirst({
+    let member = await db.query.communityMembers.findFirst({
       where: and(
         eq(communityMembers.communityId, communityId),
         eq(communityMembers.userId, userId)
       ),
     });
+
+    // Auto-reparación: Si no es miembro en community_members pero es el creador de la comunidad, crearlo síncronamente
+    if (!member) {
+      const community = await db.query.communities.findFirst({
+        where: eq(communities.id, communityId),
+      });
+
+      if (community && community.creatorId === userId) {
+        console.log(`[Auto-Reparación] Creando membresía faltante para el creador ${userId} en la comunidad ${communityId}`);
+        const [newMember] = await db.insert(communityMembers).values({
+          communityId,
+          userId,
+          role: "COMMUNITY_ADMIN",
+          status: "APPROVED",
+        }).returning();
+        member = newMember;
+      }
+    }
+
     if (!member) return null;
+
+    const roleUpper = member.role.toUpperCase();
+    const statusUpper = member.status.toUpperCase();
+
+    // Normalizar "OWNER" (legacy) a "COMMUNITY_ADMIN"
+    const roleNormalized = (roleUpper === "OWNER" || roleUpper === "COMMUNITY_ADMIN") 
+      ? "COMMUNITY_ADMIN" 
+      : roleUpper;
+
     return {
-      role: member.role as "owner" | "COMMUNITY_ADMIN" | "MODERATOR" | "MEMBER",
-      status: member.status as "approved" | "APPROVED" | "PENDING" | "BANNED",
+      role: roleNormalized as "COMMUNITY_ADMIN" | "MODERATOR" | "MEMBER",
+      status: statusUpper as "APPROVED" | "PENDING" | "BANNED",
     };
   } catch (error) {
     console.error("Error al obtener rol del usuario en la comunidad:", error);
@@ -130,7 +158,7 @@ export async function getUserCommunityRole(userId: string, communityId: string) 
 
 /**
  * Valida si un usuario tiene permisos de administración sobre una comunidad.
- * Retorna true si es owner o COMMUNITY_ADMIN aprobado o si tiene el rol GLOBAL_ADMIN.
+ * Retorna true si es COMMUNITY_ADMIN aprobado o si tiene el rol GLOBAL_ADMIN.
  */
 export async function canManageCommunity(userId: string, communityId: string) {
   try {
@@ -142,9 +170,7 @@ export async function canManageCommunity(userId: string, communityId: string) {
     const roleInfo = await getUserCommunityRole(userId, communityId);
     if (!roleInfo) return false;
 
-    const role = roleInfo.role.toLowerCase();
-    const status = roleInfo.status.toUpperCase();
-    return (role === "owner" || role === "community_admin") && status === "APPROVED";
+    return roleInfo.role === "COMMUNITY_ADMIN" && roleInfo.status === "APPROVED";
   } catch (error) {
     console.error("Error en validación de gestión de comunidad:", error);
     return false;

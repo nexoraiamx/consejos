@@ -43,7 +43,7 @@ export default async function CommunityAdminPage({ params }: Props) {
     const roleUpper = roleInfo.role.toUpperCase();
     const statusUpper = roleInfo.status.toUpperCase();
     
-    if ((roleInfo.role === "owner" || roleUpper === "COMMUNITY_ADMIN") && statusUpper === "APPROVED") {
+    if (roleUpper === "COMMUNITY_ADMIN" && statusUpper === "APPROVED") {
       canManage = true;
     }
   }

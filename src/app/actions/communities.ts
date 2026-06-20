@@ -67,12 +67,12 @@ export async function createCommunityAction(formData: CreateCommunityInput) {
         category: formData.category || null,
       }).returning();
 
-      // 2. Unir al creador como owner y approved
+      // 2. Unir al creador como COMMUNITY_ADMIN y APPROVED
       await tx.insert(communityMembers).values({
         communityId: newCommunity.id,
         userId: user.id,
-        role: "owner",
-        status: "approved",
+        role: "COMMUNITY_ADMIN",
+        status: "APPROVED",
       });
 
       // 3. Crear log de auditoría
@@ -138,11 +138,12 @@ export async function toggleJoinCommunityAction(communityId: string) {
         };
       }
 
-      // Si ya es miembro, se sale
-      if (existingMember.role === "owner" || existingMember.role === "COMMUNITY_ADMIN") {
+      // Si ya es miembro, se sale. El creador o administrador no puede salirse.
+      const roleUpper = existingMember.role.toUpperCase();
+      if (roleUpper === "OWNER" || roleUpper === "COMMUNITY_ADMIN") {
         return {
           success: false,
-          error: "Como propietario o administrador principal, no puedes abandonar la comunidad."
+          error: "No puedes abandonar una comunidad que administras sin transferir la administración."
         };
       }
 
@@ -249,10 +250,10 @@ export async function toggleJoinCommunityAction(communityId: string) {
 export async function createInvitationAction(communityId: string) {
   const user = await requireAuth();
 
-  // Validate permission: must be owner or COMMUNITY_ADMIN
+  // Validate permission: must be COMMUNITY_ADMIN
   const roleInfo = await getUserCommunityRole(user.id, communityId);
   const isGlobalAdmin = user.globalRole === "GLOBAL_ADMIN";
-  const canManage = isGlobalAdmin || (roleInfo && (roleInfo.role === "owner" || roleInfo.role === "COMMUNITY_ADMIN") && roleInfo.status.toUpperCase() === "APPROVED");
+  const canManage = isGlobalAdmin || (roleInfo && roleInfo.role === "COMMUNITY_ADMIN" && roleInfo.status === "APPROVED");
 
   if (!canManage) {
     return { success: false, error: "No tienes permiso para gestionar invitaciones de esta comunidad." };
@@ -310,10 +311,10 @@ export async function deactivateInvitationAction(invitationId: string) {
     return { success: false, error: "La invitación no existe." };
   }
 
-  // Validate permission
+  // Validate permission: must be COMMUNITY_ADMIN
   const roleInfo = await getUserCommunityRole(user.id, invite.communityId);
   const isGlobalAdmin = user.globalRole === "GLOBAL_ADMIN";
-  const canManage = isGlobalAdmin || (roleInfo && (roleInfo.role === "owner" || roleInfo.role === "COMMUNITY_ADMIN") && roleInfo.status.toUpperCase() === "APPROVED");
+  const canManage = isGlobalAdmin || (roleInfo && roleInfo.role === "COMMUNITY_ADMIN" && roleInfo.status === "APPROVED");
 
   if (!canManage) {
     return { success: false, error: "No tienes permiso para gestionar esta invitación." };
@@ -346,7 +347,7 @@ export async function processJoinRequestAction(requestId: string, action: "APPRO
 
   const roleInfo = await getUserCommunityRole(user.id, request.communityId);
   const isGlobalAdmin = user.globalRole === "GLOBAL_ADMIN";
-  const canManage = isGlobalAdmin || (roleInfo && (roleInfo.role === "owner" || roleInfo.role === "COMMUNITY_ADMIN") && roleInfo.status.toUpperCase() === "APPROVED");
+  const canManage = isGlobalAdmin || (roleInfo && roleInfo.role === "COMMUNITY_ADMIN" && roleInfo.status === "APPROVED");
 
   if (!canManage) {
     return { success: false, error: "No tienes permiso para gestionar solicitudes en esta comunidad." };
@@ -401,10 +402,18 @@ export async function processJoinRequestAction(requestId: string, action: "APPRO
 export async function updateMemberRoleAction(communityId: string, memberUserId: string, newRole: "MEMBER" | "MODERATOR") {
   const user = await requireAuth();
 
-  // Validate permission: only the owner (or global admin) can change roles!
+  // Validate permission: only the COMMUNITY_ADMIN (or global admin) can change roles!
   const roleInfo = await getUserCommunityRole(user.id, communityId);
   const isGlobalAdmin = user.globalRole === "GLOBAL_ADMIN";
-  const isOwner = isGlobalAdmin || (roleInfo && roleInfo.role === "owner" && roleInfo.status.toUpperCase() === "APPROVED");
+  
+  // El creador es el único administrador local que puede cambiar los roles de otros administradores.
+  // Obtenemos el creador de la comunidad para validar esto.
+  const community = await db.query.communities.findFirst({
+    where: eq(communities.id, communityId)
+  });
+  const isCreator = community && community.creatorId === user.id;
+  
+  const isOwner = isGlobalAdmin || (roleInfo && roleInfo.role === "COMMUNITY_ADMIN" && roleInfo.status === "APPROVED");
 
   if (!isOwner) {
     return { success: false, error: "Solo el propietario de la comunidad puede cambiar los roles de los miembros." };
@@ -422,8 +431,12 @@ export async function updateMemberRoleAction(communityId: string, memberUserId: 
     return { success: false, error: "El miembro especificado no existe." };
   }
 
-  if (targetMember.role === "owner") {
-    return { success: false, error: "No puedes cambiar el rol del propietario de la comunidad." };
+  const targetRoleUpper = targetMember.role.toUpperCase();
+  if (targetRoleUpper === "OWNER" || targetRoleUpper === "COMMUNITY_ADMIN") {
+    // Solo el creador original o global admin puede cambiar los roles de otros admins principales.
+    if (!isCreator && !isGlobalAdmin) {
+      return { success: false, error: "No puedes cambiar el rol del propietario de la comunidad." };
+    }
   }
 
   try {
@@ -448,10 +461,10 @@ export async function updateMemberRoleAction(communityId: string, memberUserId: 
 export async function expelMemberAction(communityId: string, memberUserId: string) {
   const user = await requireAuth();
 
-  // Validate permission: owner, COMMUNITY_ADMIN (or global admin)
+  // Validate permission: COMMUNITY_ADMIN (or global admin)
   const roleInfo = await getUserCommunityRole(user.id, communityId);
   const isGlobalAdmin = user.globalRole === "GLOBAL_ADMIN";
-  const canManage = isGlobalAdmin || (roleInfo && (roleInfo.role === "owner" || roleInfo.role === "COMMUNITY_ADMIN") && roleInfo.status.toUpperCase() === "APPROVED");
+  const canManage = isGlobalAdmin || (roleInfo && roleInfo.role === "COMMUNITY_ADMIN" && roleInfo.status === "APPROVED");
 
   if (!canManage) {
     return { success: false, error: "No tienes permiso para expulsar miembros de esta comunidad." };
@@ -469,14 +482,21 @@ export async function expelMemberAction(communityId: string, memberUserId: strin
     return { success: false, error: "El miembro especificado no existe." };
   }
 
-  // Safety checks
-  if (targetMember.role === "owner") {
-    return { success: false, error: "No se puede expulsar al propietario de la comunidad." };
+  // Safety checks: No se puede expulsar al creador
+  const community = await db.query.communities.findFirst({
+    where: eq(communities.id, communityId)
+  });
+  
+  if (community && targetMember.userId === community.creatorId) {
+    return { success: false, error: "No se puede expulsar al creador de la comunidad." };
   }
 
-  // COMMUNITY_ADMIN cannot expel other administrators unless they are the owner
-  const isUserOwner = isGlobalAdmin || (roleInfo && roleInfo.role === "owner");
-  if (targetMember.role === "COMMUNITY_ADMIN" && !isUserOwner) {
+  // COMMUNITY_ADMIN cannot expel other administrators unless they are the creator or global admin
+  const targetRoleUpper = targetMember.role.toUpperCase();
+  const isUserCreator = community && community.creatorId === user.id;
+  const isUserOwner = isGlobalAdmin || isUserCreator;
+  
+  if ((targetRoleUpper === "OWNER" || targetRoleUpper === "COMMUNITY_ADMIN") && !isUserOwner) {
     return { success: false, error: "No tienes permisos suficientes para expulsar a un administrador principal." };
   }
 
@@ -518,10 +538,10 @@ export async function updateCommunitySettingsAction(
 ) {
   const user = await requireAuth();
 
-  // Validate permission: must be owner or COMMUNITY_ADMIN
+  // Validate permission: must be COMMUNITY_ADMIN
   const roleInfo = await getUserCommunityRole(user.id, communityId);
   const isGlobalAdmin = user.globalRole === "GLOBAL_ADMIN";
-  const canManage = isGlobalAdmin || (roleInfo && (roleInfo.role === "owner" || roleInfo.role === "COMMUNITY_ADMIN") && roleInfo.status.toUpperCase() === "APPROVED");
+  const canManage = isGlobalAdmin || (roleInfo && roleInfo.role === "COMMUNITY_ADMIN" && roleInfo.status === "APPROVED");
 
   if (!canManage) {
     return { success: false, error: "No tienes permiso para actualizar los ajustes de esta comunidad." };

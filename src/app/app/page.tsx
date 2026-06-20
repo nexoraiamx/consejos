@@ -1,6 +1,6 @@
 import React, { Suspense } from "react";
 import { db } from "@/db";
-import { posts, communities, communityMembers, profiles, userReputation, attachments, comments, joinRequests } from "@/db/schema";
+import { posts, communities, communityMembers, profiles, userReputation, attachments, comments, joinRequests, users } from "@/db/schema";
 import { eq, and, isNull, sql, desc, inArray, or } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { PostCard } from "@/components/shared/post-card";
@@ -126,7 +126,7 @@ async function FeedSection({ currentUserId }: { currentUserId: string }) {
     let isUserAdmin = false;
     if (currentUserId) {
       const userObj = await db.query.users.findFirst({
-        where: eq(profiles.userId, currentUserId) // O por id de tabla users
+        where: eq(users.id, currentUserId)
       });
       if (userObj?.globalRole === "GLOBAL_ADMIN") {
         isUserAdmin = true;
@@ -151,7 +151,7 @@ async function FeedSection({ currentUserId }: { currentUserId: string }) {
               eq(posts.status, "ACTIVE"),
               eq(communities.privacyType, "PUBLIC")
             ),
-            // Private or invite-only active posts where user is approved member
+            // Private or invite-only active posts where user is approved member or community creator
             and(
               eq(posts.status, "ACTIVE"),
               or(
@@ -160,7 +160,8 @@ async function FeedSection({ currentUserId }: { currentUserId: string }) {
               ),
               or(
                 eq(communityMembers.status, "APPROVED"),
-                eq(communityMembers.status, "approved")
+                eq(communityMembers.status, "approved"),
+                eq(communities.creatorId, currentUserId)
               )
             ),
             // Hidden posts where user is owner, community admin, moderator, or community creator
