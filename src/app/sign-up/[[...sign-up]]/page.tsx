@@ -1,11 +1,12 @@
-import { SignIn } from "@clerk/nextjs";
+import { SignUp } from "@clerk/nextjs";
 
-export default function SignInPage() {
+export default function SignUpPage() {
   return (
     <div className="flex flex-col flex-1 items-center justify-center bg-neutral-950 px-6 py-20">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_60%_at_50%_-20%,rgba(120,119,198,0.05),rgba(255,255,255,0))]" />
       <div className="relative z-10 w-full max-w-md flex flex-col items-center gap-4">
-        <SignIn
+        <SignUp
+          path="/sign-up"
           appearance={{
             elements: {
               card: "bg-neutral-900 border border-neutral-800 shadow-xl rounded-2xl",
