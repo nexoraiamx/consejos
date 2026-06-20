@@ -1,6 +1,16 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
-export default clerkMiddleware();
+export default clerkMiddleware(async (auth, request) => {
+  const reqHeaders = new Headers(request.headers);
+  reqHeaders.set("x-pathname", request.nextUrl.pathname);
+  
+  return NextResponse.next({
+    request: {
+      headers: reqHeaders,
+    },
+  });
+});
 
 export const config = {
   matcher: [

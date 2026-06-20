@@ -1,13 +1,45 @@
+import React, { Suspense } from "react";
 import { db } from "@/db";
 import { communities, communityMembers, joinRequests, profiles } from "@/db/schema";
 import { eq, and, isNull, sql, or } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import ExploreClient from "./explore-client";
+import { CommunityCardSkeleton } from "@/components/shared/skeletons";
 
-// Forzar renderizado dinámico para leer siempre los datos más recientes de la base de datos
+// Forzar renderizado dinámico pero permitir streaming
 export const dynamic = "force-dynamic";
 
-export default async function ExplorePage() {
+function ExploreSkeleton() {
+  return (
+    <div className="flex-1 w-full max-w-6xl mx-auto px-6 py-8 flex flex-col gap-6 text-left">
+      <div className="flex flex-col gap-2">
+        <div className="h-7 w-48 bg-neutral-900 animate-pulse rounded-md" />
+        <div className="h-4 w-72 bg-neutral-900 animate-pulse rounded-md" />
+      </div>
+      
+      {/* Buscador de mentira (Skeleton) */}
+      <div className="h-11 w-full bg-neutral-900 animate-pulse rounded-2xl border border-neutral-800" />
+      
+      {/* Grid de comunidades */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+        <CommunityCardSkeleton />
+        <CommunityCardSkeleton />
+        <CommunityCardSkeleton />
+        <CommunityCardSkeleton />
+      </div>
+    </div>
+  );
+}
+
+export default function ExplorePage() {
+  return (
+    <Suspense fallback={<ExploreSkeleton />}>
+      <ExploreContent />
+    </Suspense>
+  );
+}
+
+async function ExploreContent() {
   const user = await getCurrentUser();
   let dbCommunities: {
     id: string;

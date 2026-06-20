@@ -195,8 +195,8 @@ export function OnboardingClient({
     });
 
     if (result.success) {
-      router.push("/app/explore");
-      router.refresh();
+      // Force clean browser load to guarantee Server Layout catches the updated database state instantly
+      window.location.href = "/app/explore";
     } else {
       setError(result.error || "Ocurrió un error al procesar el onboarding.");
       setIsSubmitting(false);

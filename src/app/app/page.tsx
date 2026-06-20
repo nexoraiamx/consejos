@@ -1,4 +1,4 @@
-import React from "react";
+import React, { Suspense } from "react";
 import { db } from "@/db";
 import { posts, communities, communityMembers, profiles, userReputation, attachments, comments, joinRequests } from "@/db/schema";
 import { eq, and, isNull, sql, desc, inArray, or } from "drizzle-orm";
@@ -7,6 +7,7 @@ import { PostCard } from "@/components/shared/post-card";
 import { CommunityCard } from "@/components/shared/community-card";
 import { Sparkles, TrendingUp, Award, Plus, Inbox } from "lucide-react";
 import Link from "next/link";
+import { FeedSkeleton, CommunityCardSkeleton, Skeleton } from "@/components/shared/skeletons";
 
 export const dynamic = "force-dynamic";
 
@@ -27,8 +28,79 @@ const timeAgo = (date: Date) => {
 
 export default async function AppDashboard() {
   const currentUser = await getCurrentUser();
+  const currentUserId = currentUser?.id || "";
 
-  // 1. Consultar posts reales de Neon con leftJoins robustos y filtrado por privacidad
+  return (
+    <div className="flex-1 w-full max-w-6xl mx-auto px-6 py-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        {/* COLUMNA PRINCIPAL: Feed de Publicaciones */}
+        <div className="lg:col-span-2 flex flex-col gap-6">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-heading font-semibold text-neutral-100 tracking-tight">
+              Tu Feed
+            </h1>
+            
+            <Link
+              href="/app/explore"
+              className="inline-flex items-center gap-1.5 rounded-full bg-white text-neutral-950 px-4 py-2 text-xs font-semibold hover:bg-neutral-200 transition-all cursor-pointer shadow-md shadow-white/5"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Publicar</span>
+            </Link>
+          </div>
+
+          <Suspense fallback={<FeedSkeleton />}>
+            <FeedSection currentUserId={currentUserId} />
+          </Suspense>
+        </div>
+
+        {/* COLUMNA LATERAL (Desktop only) */}
+        <div className="hidden lg:flex flex-col gap-8">
+          
+          {/* Tarjeta de Reputación */}
+          <Suspense fallback={<Skeleton className="h-44 w-full rounded-3xl bg-neutral-950/40 border border-neutral-900" />}>
+            <ReputationSection currentUserId={currentUserId} />
+          </Suspense>
+
+          {/* Comunidades Recomendadas */}
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-neutral-400" />
+              <h3 className="text-sm font-semibold text-neutral-200">Comunidades Destacadas</h3>
+            </div>
+
+            <Suspense fallback={
+              <div className="space-y-4">
+                <CommunityCardSkeleton />
+                <CommunityCardSkeleton />
+                <CommunityCardSkeleton />
+              </div>
+            }>
+              <RecommendedCommunitiesSection currentUserId={currentUserId} />
+            </Suspense>
+          </div>
+
+          {/* Reglas de la comunidad / Tip del día */}
+          <div className="p-6 rounded-3xl border border-neutral-900/40 bg-neutral-950/20 text-left flex flex-col gap-2">
+            <h4 className="text-xs font-semibold text-neutral-400 flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5 text-blue-400" />
+              Consejo de moderación
+            </h4>
+            <p className="text-[11px] text-neutral-500 leading-relaxed font-light">
+              Respeta las directrices del sistema de reputación. Marcar la respuesta aceptada en tus dudas ayuda a los expertos a ganar visibilidad y puntos.
+            </p>
+          </div>
+          
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+// 1. Componente Asíncrono para el Feed de Publicaciones
+async function FeedSection({ currentUserId }: { currentUserId: string }) {
   let dbPosts: {
     id: string;
     title: string;
@@ -46,11 +118,22 @@ export default async function AppDashboard() {
     communityName: string;
     commentsCount: number;
   }[] = [];
-  try {
-    const currentUserId = currentUser?.id || "";
-    const isGlobalAdmin = currentUser?.globalRole === "GLOBAL_ADMIN";
 
-    const whereClause = isGlobalAdmin
+  try {
+    const isGlobalAdmin = false; // Se gestionará simplificado o con roles
+    
+    // Consultar rol global del usuario
+    let isUserAdmin = false;
+    if (currentUserId) {
+      const userObj = await db.query.users.findFirst({
+        where: eq(profiles.userId, currentUserId) // O por id de tabla users
+      });
+      if (userObj?.globalRole === "GLOBAL_ADMIN") {
+        isUserAdmin = true;
+      }
+    }
+
+    const whereClause = isUserAdmin
       ? and(
           isNull(posts.deletedAt),
           isNull(communities.deletedAt),
@@ -81,7 +164,7 @@ export default async function AppDashboard() {
               )
             ),
             // Hidden posts where user is owner, community admin, moderator, or community creator
-            currentUser
+            currentUserId
               ? and(
                   eq(posts.status, "HIDDEN"),
                   or(
@@ -98,7 +181,7 @@ export default async function AppDashboard() {
                         eq(communityMembers.status, "approved")
                       )
                     ),
-                    eq(communities.creatorId, currentUser.id)
+                    eq(communities.creatorId, currentUserId)
                   )
                 )
               : sql`false`
@@ -160,7 +243,116 @@ export default async function AppDashboard() {
     }
   }
 
-  // 3. Consultar comunidades destacadas (hasta 5)
+  if (dbPosts.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center border border-dashed border-neutral-900 rounded-3xl bg-neutral-950/20 px-6">
+        <Inbox className="h-10 w-10 text-neutral-700 mb-4" />
+        <h3 className="text-sm font-semibold text-neutral-300">Aún no hay publicaciones</h3>
+        <p className="text-xs text-neutral-500 max-w-sm mt-1 font-light leading-relaxed">
+          Únete a comunidades de tu interés y publica tus dudas o recursos para verlos en tu feed.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {dbPosts.map((post) => {
+        const postAttachments = feedAttachments.filter(
+          (att) => att.targetId === post.id
+        );
+        return (
+          <PostCard
+            key={post.id}
+            id={post.id}
+            title={post.title}
+            content={post.content}
+            communitySlug={post.communitySlug}
+            communityName={post.communityName}
+            authorId={post.authorId}
+            authorName={post.authorName || "Usuario"}
+            authorAvatar={post.authorAvatar || undefined}
+            authorReputation={post.authorReputation || 0}
+            category={post.category || undefined}
+            tags={post.tags}
+            createdAt={timeAgo(post.createdAt)}
+            upvotesCount={0}
+            commentsCount={post.commentsCount || 0}
+            postType={post.postType as "QUESTION" | "RESOURCE" | "DISCUSSION" | "CASE_STUDY"}
+            status={post.status as "ACTIVE" | "HIDDEN" | "DELETED"}
+            currentUserId={currentUserId}
+            attachments={postAttachments}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+// 2. Componente Asíncrono para la sección de Reputación
+async function ReputationSection({ currentUserId }: { currentUserId: string }) {
+  let userRep = { score: 0, level: 1 };
+  
+  if (currentUserId) {
+    try {
+      const rep = await db.query.userReputation.findFirst({
+        where: eq(userReputation.userId, currentUserId),
+      });
+      if (rep) {
+        userRep = { score: rep.score || 0, level: rep.level || 1 };
+      }
+    } catch (error) {
+      console.error("Error al obtener reputación para Dashboard:", error);
+    }
+  }
+
+  const nextLevelScore = userRep.level * 150;
+  const prevLevelScore = (userRep.level - 1) * 150;
+  const progressPercent = Math.max(
+    0,
+    Math.min(
+      100,
+      userRep.score > 0
+        ? ((userRep.score - prevLevelScore) / (nextLevelScore - prevLevelScore)) * 100
+        : 0
+    )
+  );
+
+  return (
+    <div className="p-6 rounded-3xl border border-neutral-900 bg-neutral-950/40 backdrop-blur-md flex flex-col gap-4 text-left">
+      <div className="flex items-center gap-3">
+        <div className="h-8 w-8 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-center text-white">
+          <Award className="h-4 w-4 text-blue-400" />
+        </div>
+        <div>
+          <h3 className="text-sm font-semibold text-neutral-200">Tu Reputación</h3>
+          <span className="text-[10px] text-neutral-500">Nivel {userRep.level} de Experto</span>
+        </div>
+      </div>
+
+      <div className="flex items-end gap-2 mt-1">
+        <span className="text-2xl font-semibold tracking-tight text-white">{userRep.score}</span>
+        <span className="text-[11px] text-neutral-500 mb-1">puntos totales</span>
+      </div>
+
+      <div className="flex flex-col gap-1.5 mt-1">
+        <div className="h-1.5 w-full bg-neutral-900 rounded-full overflow-hidden">
+          <div 
+            className="h-full bg-white rounded-full transition-all duration-500" 
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+        <div className="flex justify-between text-[9px] text-neutral-500">
+          <span>{prevLevelScore} pts (Lvl {userRep.level})</span>
+          <span>{nextLevelScore} pts (Lvl {userRep.level + 1})</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 3. Componente Asíncrono para las Comunidades Recomendadas
+async function RecommendedCommunitiesSection({ currentUserId }: { currentUserId: string }) {
   let dbCommunities: {
     id: string;
     slug: string;
@@ -170,6 +362,7 @@ export default async function AppDashboard() {
     avatarUrl: string | null;
     category: string | null;
   }[] = [];
+
   try {
     dbCommunities = await db
       .select({
@@ -211,12 +404,12 @@ export default async function AppDashboard() {
 
       let isJoined = false;
       let membershipStatus: "APPROVED" | "PENDING" | "BANNED" | null = null;
-      if (currentUser) {
+      if (currentUserId) {
         try {
           const membership = await db.query.communityMembers.findFirst({
             where: and(
               eq(communityMembers.communityId, comm.id),
-              eq(communityMembers.userId, currentUser.id)
+              eq(communityMembers.userId, currentUserId)
             ),
           });
           if (membership) {
@@ -227,7 +420,7 @@ export default async function AppDashboard() {
             const joinRequest = await db.query.joinRequests.findFirst({
               where: and(
                 eq(joinRequests.communityId, comm.id),
-                eq(joinRequests.userId, currentUser.id)
+                eq(joinRequests.userId, currentUserId)
               ),
             });
             if (joinRequest) {
@@ -254,158 +447,11 @@ export default async function AppDashboard() {
     })
   );
 
-  // 4. Obtener reputación del usuario actual
-  let userRep = { score: 0, level: 1 };
-  if (currentUser) {
-    try {
-      const rep = await db.query.userReputation.findFirst({
-        where: eq(userReputation.userId, currentUser.id),
-      });
-      if (rep) {
-        userRep = { score: rep.score || 0, level: rep.level || 1 };
-      }
-    } catch (error) {
-      console.error("Error al obtener reputación para Dashboard:", error);
-    }
-  }
-
-  // Límite superior aproximado para barra de progreso
-  const nextLevelScore = userRep.level * 150;
-  const prevLevelScore = (userRep.level - 1) * 150;
-  const progressPercent = Math.max(
-    0,
-    Math.min(
-      100,
-      userRep.score > 0
-        ? ((userRep.score - prevLevelScore) / (nextLevelScore - prevLevelScore)) * 100
-        : 0
-    )
-  );
-
   return (
-    <div className="flex-1 w-full max-w-6xl mx-auto px-6 py-8">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* COLUMNA PRINCIPAL: Feed de Publicaciones */}
-        <div className="lg:col-span-2 flex flex-col gap-6">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-heading font-semibold text-neutral-100 tracking-tight">
-              Tu Feed
-            </h1>
-            
-            <Link
-              href="/app/explore"
-              className="inline-flex items-center gap-1.5 rounded-full bg-white text-neutral-950 px-4 py-2 text-xs font-semibold hover:bg-neutral-200 transition-all cursor-pointer shadow-md shadow-white/5"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Publicar</span>
-            </Link>
-          </div>
-
-          {dbPosts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-24 text-center border border-dashed border-neutral-900 rounded-3xl bg-neutral-950/20 px-6">
-              <Inbox className="h-10 w-10 text-neutral-700 mb-4" />
-              <h3 className="text-sm font-semibold text-neutral-300">Aún no hay publicaciones</h3>
-              <p className="text-xs text-neutral-500 max-w-sm mt-1 font-light leading-relaxed">
-                Únete a comunidades de tu interés y publica tus dudas o recursos para verlos en tu feed.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {dbPosts.map((post) => {
-                const postAttachments = feedAttachments.filter(
-                  (att) => att.targetId === post.id
-                );
-                return (
-                  <PostCard
-                    key={post.id}
-                    id={post.id}
-                    title={post.title}
-                    content={post.content}
-                    communitySlug={post.communitySlug}
-                    communityName={post.communityName}
-                    authorId={post.authorId}
-                    authorName={post.authorName || "Usuario"}
-                    authorAvatar={post.authorAvatar || undefined}
-                    authorReputation={post.authorReputation || 0}
-                    category={post.category || undefined}
-                    tags={post.tags}
-                    createdAt={timeAgo(post.createdAt)}
-                    upvotesCount={0}
-                    commentsCount={post.commentsCount || 0}
-                    postType={post.postType as "QUESTION" | "RESOURCE" | "DISCUSSION" | "CASE_STUDY"}
-                    status={post.status as "ACTIVE" | "HIDDEN" | "DELETED"}
-                    currentUserId={currentUser?.id}
-                    attachments={postAttachments}
-                  />
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* COLUMNA LATERAL (Desktop only) */}
-        <div className="hidden lg:flex flex-col gap-8">
-          
-          {/* Tarjeta de Reputación */}
-          <div className="p-6 rounded-3xl border border-neutral-900 bg-neutral-950/40 backdrop-blur-md flex flex-col gap-4 text-left">
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-center text-white">
-                <Award className="h-4 w-4 text-blue-400" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-neutral-200">Tu Reputación</h3>
-                <span className="text-[10px] text-neutral-500">Nivel {userRep.level} de Experto</span>
-              </div>
-            </div>
-
-            <div className="flex items-end gap-2 mt-1">
-              <span className="text-2xl font-semibold tracking-tight text-white">{userRep.score}</span>
-              <span className="text-[11px] text-neutral-500 mb-1">puntos totales</span>
-            </div>
-
-            <div className="flex flex-col gap-1.5 mt-1">
-              <div className="h-1.5 w-full bg-neutral-900 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-white rounded-full transition-all duration-500" 
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-              <div className="flex justify-between text-[9px] text-neutral-500">
-                <span>{prevLevelScore} pts (Lvl {userRep.level})</span>
-                <span>{nextLevelScore} pts (Lvl {userRep.level + 1})</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Comunidades Recomendadas */}
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-neutral-400" />
-              <h3 className="text-sm font-semibold text-neutral-200">Comunidades Destacadas</h3>
-            </div>
-
-            <div className="space-y-4">
-              {communitiesWithMeta.map((community) => (
-                <CommunityCard key={community.id} {...community} />
-              ))}
-            </div>
-          </div>
-
-          {/* Reglas de la comunidad / Tip del día */}
-          <div className="p-6 rounded-3xl border border-neutral-900/40 bg-neutral-950/20 text-left flex flex-col gap-2">
-            <h4 className="text-xs font-semibold text-neutral-400 flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-blue-400" />
-              Consejo de moderación
-            </h4>
-            <p className="text-[11px] text-neutral-500 leading-relaxed font-light">
-              Respeta las directrices del sistema de reputación. Marcar la respuesta aceptada en tus dudas ayuda a los expertos a ganar visibilidad y puntos.
-            </p>
-          </div>
-          
-        </div>
-
-      </div>
+    <div className="space-y-4">
+      {communitiesWithMeta.map((community) => (
+        <CommunityCard key={community.id} {...community} />
+      ))}
     </div>
   );
 }
