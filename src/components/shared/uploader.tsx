@@ -384,9 +384,12 @@ export function Uploader({
       return { valid: false, error: "Extensión de archivo bloqueada por seguridad." };
     }
 
-    // Límites de tamaño y MIMEs
     const size = file.size;
     const type = file.type;
+    const baseMimeType = type.split(";")[0].trim().toLowerCase();
+    
+    const lastDot = name.lastIndexOf(".");
+    const extension = lastDot !== -1 ? name.substring(lastDot) : "";
 
     const allowedMimes = {
       IMAGE: ["image/png", "image/jpeg", "image/gif", "image/webp"],
@@ -395,25 +398,53 @@ export function Uploader({
       PDF: ["application/pdf"],
     };
 
-    let isAllowed = false;
-    let limit = 0;
+    const allowedExtensions = {
+      IMAGE: [".png", ".jpg", ".jpeg", ".gif", ".webp"],
+      VIDEO: [".mp4", ".webm", ".ogg"],
+      AUDIO: [".mp3", ".wav", ".m4a", ".mpeg", ".ogg", ".webm"],
+      PDF: [".pdf"]
+    };
 
-    if (allowedMimes.IMAGE.includes(type)) {
-      isAllowed = true;
-      limit = 10 * 1024 * 1024; // 10MB
-    } else if (allowedMimes.VIDEO.includes(type)) {
-      isAllowed = true;
-      limit = 100 * 1024 * 1024; // 100MB
-    } else if (allowedMimes.AUDIO.includes(type) || type === "audio/webm") {
-      isAllowed = true;
-      limit = 50 * 1024 * 1024; // 50MB
-    } else if (allowedMimes.PDF.includes(type)) {
-      isAllowed = true;
-      limit = 25 * 1024 * 1024; // 25MB
+    let detectedType: "IMAGE" | "VIDEO" | "AUDIO" | "PDF" | null = null;
+
+    if (allowedMimes.IMAGE.includes(baseMimeType)) {
+      detectedType = "IMAGE";
+    } else if (allowedMimes.VIDEO.includes(baseMimeType)) {
+      detectedType = "VIDEO";
+    } else if (allowedMimes.AUDIO.includes(baseMimeType)) {
+      detectedType = "AUDIO";
+    } else if (allowedMimes.PDF.includes(baseMimeType)) {
+      detectedType = "PDF";
     }
 
-    if (!isAllowed) {
+    if (!detectedType) {
+      const extMapping: Record<string, "IMAGE" | "VIDEO" | "AUDIO" | "PDF"> = {
+        ".png": "IMAGE", ".jpg": "IMAGE", ".jpeg": "IMAGE", ".gif": "IMAGE", ".webp": "IMAGE",
+        ".mp4": "VIDEO", ".webm": "VIDEO", ".ogg": "VIDEO",
+        ".mp3": "AUDIO", ".wav": "AUDIO", ".m4a": "AUDIO", ".mpeg": "AUDIO",
+        ".pdf": "PDF"
+      };
+      detectedType = extMapping[extension] || null;
+    }
+
+    if (!detectedType) {
       return { valid: false, error: "Tipo de archivo no permitido. Solo se aceptan imágenes, videos, audios y PDFs." };
+    }
+
+    const isExtensionValid = allowedExtensions[detectedType].includes(extension);
+    if (!isExtensionValid) {
+      return { valid: false, error: `La extensión del archivo (${extension}) no corresponde al tipo de archivo detectado (${detectedType}).` };
+    }
+
+    let limit = 0;
+    if (detectedType === "IMAGE") {
+      limit = 10 * 1024 * 1024; // 10MB
+    } else if (detectedType === "VIDEO") {
+      limit = 100 * 1024 * 1024; // 100MB
+    } else if (detectedType === "AUDIO") {
+      limit = 50 * 1024 * 1024; // 50MB
+    } else if (detectedType === "PDF") {
+      limit = 25 * 1024 * 1024; // 25MB
     }
 
     if (size > limit) {

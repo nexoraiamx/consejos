@@ -25,7 +25,7 @@ export const LIMITS = {
 export const ALLOWED_MIMES = {
   IMAGE: ["image/png", "image/jpeg", "image/gif", "image/webp"],
   VIDEO: ["video/mp4", "video/webm", "video/ogg"],
-  AUDIO: ["audio/mpeg", "audio/wav", "audio/ogg", "audio/mp4", "audio/x-m4a", "audio/mpeg3"],
+  AUDIO: ["audio/mpeg", "audio/wav", "audio/ogg", "audio/mp4", "audio/x-m4a", "audio/mpeg3", "audio/webm"],
   PDF: ["application/pdf"],
 };
 
@@ -47,28 +47,55 @@ export function validateFile(fileName: string, fileSize: number, mimeType: strin
     return { valid: false, error: "Archivo peligroso detectado: Extensión bloqueada." };
   }
 
-  // Identify type and validate sizes
-  let isAllowed = false;
-  let limit = 0;
+  // Extract base MIME type (strip parameter codecs etc)
+  const baseMimeType = mimeType.split(";")[0].trim().toLowerCase();
+  
+  // Find extension
+  const lastDot = lowercaseName.lastIndexOf(".");
+  const extension = lastDot !== -1 ? lowercaseName.substring(lastDot) : "";
 
-  if (ALLOWED_MIMES.IMAGE.includes(mimeType)) {
-    isAllowed = true;
-    limit = LIMITS.IMAGE;
-  } else if (ALLOWED_MIMES.VIDEO.includes(mimeType)) {
-    isAllowed = true;
-    limit = LIMITS.VIDEO;
-  } else if (ALLOWED_MIMES.AUDIO.includes(mimeType)) {
-    isAllowed = true;
-    limit = LIMITS.AUDIO;
-  } else if (ALLOWED_MIMES.PDF.includes(mimeType)) {
-    isAllowed = true;
-    limit = LIMITS.PDF;
+  // Categories extension mapping
+  const allowedExtensions = {
+    IMAGE: [".png", ".jpg", ".jpeg", ".gif", ".webp"],
+    VIDEO: [".mp4", ".webm", ".ogg"],
+    AUDIO: [".mp3", ".wav", ".m4a", ".mpeg", ".ogg", ".webm"],
+    PDF: [".pdf"]
+  };
+
+  // Determine file type category based on MIME type first
+  let detectedType: "IMAGE" | "VIDEO" | "AUDIO" | "PDF" | null = null;
+  if (ALLOWED_MIMES.IMAGE.includes(baseMimeType)) {
+    detectedType = "IMAGE";
+  } else if (ALLOWED_MIMES.VIDEO.includes(baseMimeType)) {
+    detectedType = "VIDEO";
+  } else if (ALLOWED_MIMES.AUDIO.includes(baseMimeType)) {
+    detectedType = "AUDIO";
+  } else if (ALLOWED_MIMES.PDF.includes(baseMimeType)) {
+    detectedType = "PDF";
   }
 
-  if (!isAllowed) {
+  // Fallback to extension if MIME type is generic or unknown
+  if (!detectedType) {
+    const extMimeMapping: Record<string, "IMAGE" | "VIDEO" | "AUDIO" | "PDF"> = {
+      ".png": "IMAGE", ".jpg": "IMAGE", ".jpeg": "IMAGE", ".gif": "IMAGE", ".webp": "IMAGE",
+      ".mp4": "VIDEO", ".webm": "VIDEO", ".ogg": "VIDEO",
+      ".mp3": "AUDIO", ".wav": "AUDIO", ".m4a": "AUDIO", ".mpeg": "AUDIO",
+      ".pdf": "PDF"
+    };
+    detectedType = extMimeMapping[extension] || null;
+  }
+
+  if (!detectedType) {
     return { valid: false, error: `Tipo de archivo no permitido (${mimeType}).` };
   }
 
+  // Cross-validate extension matches the detected category
+  const isExtensionValid = allowedExtensions[detectedType].includes(extension);
+  if (!isExtensionValid) {
+    return { valid: false, error: `La extensión del archivo (${extension}) no corresponde al tipo de archivo detectado (${detectedType}).` };
+  }
+
+  const limit = LIMITS[detectedType];
   if (fileSize > limit) {
     const limitMb = Math.round(limit / (1024 * 1024));
     return { valid: false, error: `El archivo excede el tamaño máximo de ${limitMb}MB para este tipo.` };

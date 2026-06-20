@@ -95,6 +95,15 @@ async function runTests() {
     console.log(" - book.pdf (30MB):", sizeCheck4.valid ? "FAIL" : "OK (Bloqueado)", sizeCheck4.error || "");
     if (sizeCheck4.valid) throw new Error("Fallo: Se permitió PDF de 30MB");
 
+    // Pruebas de WebM audio/video con codecs
+    const webmAudioCheck = validateFile("grabacion.webm", 10 * 1024 * 1024, "audio/webm;codecs=opus");
+    console.log(" - grabacion.webm (audio/webm;codecs=opus):", webmAudioCheck.valid ? "OK (Permitido)" : "FAIL", webmAudioCheck.error || "");
+    if (!webmAudioCheck.valid) throw new Error("Fallo: Se bloqueó grabacion.webm con codec opus");
+
+    const webmVideoCheck = validateFile("grabacion_video.webm", 30 * 1024 * 1024, "video/webm;codecs=vp9,opus");
+    console.log(" - grabacion_video.webm (video/webm;codecs=vp9,opus):", webmVideoCheck.valid ? "OK (Permitido)" : "FAIL", webmVideoCheck.error || "");
+    if (!webmVideoCheck.valid) throw new Error("Fallo: Se bloqueó video webm");
+
     // Pruebas de MIME types no soportados
     const mimeCheck = validateFile("index.html", 200, "text/html");
     console.log(" - index.html (text/html):", mimeCheck.valid ? "FAIL" : "OK (Bloqueado)", mimeCheck.error || "");
