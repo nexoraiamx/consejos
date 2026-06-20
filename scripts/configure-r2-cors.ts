@@ -30,13 +30,9 @@ async function configureCors() {
 
   const corsRules = [
     {
-      AllowedOrigins: [
-        "https://consejos-app.vercel.app",
-        "https://*.vercel.app",
-        "http://localhost:3000",
-      ],
-      AllowedMethods: ["GET", "PUT", "POST", "HEAD", "OPTIONS"],
-      AllowedHeaders: ["*"],
+      AllowedOrigins: ["*"],
+      AllowedMethods: ["GET", "PUT", "POST", "HEAD"],
+      AllowedHeaders: ["Content-Type"],
       ExposeHeaders: ["ETag", "Content-Length"],
       MaxAgeSeconds: 86400,
     },
