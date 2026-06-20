@@ -43,6 +43,13 @@
       "when": 1781943878266,
       "tag": "0005_cool_bastion",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781966474177,
+      "tag": "0006_spotty_random",
+      "breakpoints": true
     }
   ]
 }

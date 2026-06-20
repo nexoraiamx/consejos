@@ -7,6 +7,7 @@ import { requireAuth } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { createNotificationTx } from "@/lib/notifications";
 import { AttachmentInput } from "./posts";
+import { checkAndAwardFirstCommentBadge, syncUserReputationAndLevel } from "@/lib/reputation";
 
 interface CreateCommentInput {
   postId: string;
@@ -155,6 +156,9 @@ export async function createCommentAction(formData: CreateCommentInput) {
         }
       }
 
+      // Insignias automáticas
+      await checkAndAwardFirstCommentBadge(tx, user.id);
+
       return inserted;
     });
 
@@ -287,6 +291,8 @@ export async function softDeleteCommentAction(commentId: string) {
           sourceType: "COMMENT",
           sourceId: commentId,
         });
+
+        await syncUserReputationAndLevel(tx, comment.authorId);
 
         await tx.insert(auditLogs).values({
           actorId: user.id,
@@ -523,6 +529,8 @@ export async function acceptAnswerAction(postId: string, commentId: string) {
           sourceId: commentId,
         });
 
+        await syncUserReputationAndLevel(tx, comment.authorId);
+
         // Log de auditoría
         await tx.insert(auditLogs).values({
           actorId: user.id,
@@ -548,6 +556,8 @@ export async function acceptAnswerAction(postId: string, commentId: string) {
               sourceId: post.acceptedAnswerId,
             });
 
+            await syncUserReputationAndLevel(tx, oldComment.authorId);
+
             await tx.insert(auditLogs).values({
               actorId: user.id,
               action: "ANSWER_UNACCEPTED",
@@ -572,6 +582,8 @@ export async function acceptAnswerAction(postId: string, commentId: string) {
           sourceType: "COMMENT",
           sourceId: commentId,
         });
+
+        await syncUserReputationAndLevel(tx, comment.authorId);
 
         // Log de auditoría
         await tx.insert(auditLogs).values({

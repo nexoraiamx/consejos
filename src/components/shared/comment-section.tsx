@@ -22,6 +22,7 @@ interface DBComment {
   authorName: string;
   authorAvatar?: string;
   authorReputation?: number;
+  authorUsername?: string;
   content: string;
   status: "ACTIVE" | "HIDDEN" | "DELETED";
   createdAt: string;

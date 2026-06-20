@@ -1,7 +1,7 @@
 import React, { Suspense } from "react";
 import { db } from "@/db";
-import { communities, communityMembers, joinRequests, profiles } from "@/db/schema";
-import { eq, and, isNull, sql, or } from "drizzle-orm";
+import { communities, communityMembers, joinRequests, profiles, posts, comments, userReputation } from "@/db/schema";
+import { eq, and, isNull, sql, or, desc, inArray } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import ExploreClient from "./explore-client";
 import { CommunityCardSkeleton } from "@/components/shared/skeletons";
@@ -11,14 +11,14 @@ export const dynamic = "force-dynamic";
 
 function ExploreSkeleton() {
   return (
-    <div className="flex-1 w-full max-w-6xl mx-auto px-6 py-8 flex flex-col gap-6 text-left">
+    <div className="flex-1 w-full max-w-6xl mx-auto px-6 py-8 flex flex-col gap-6 text-left animate-pulse">
       <div className="flex flex-col gap-2">
-        <div className="h-7 w-48 bg-neutral-900 animate-pulse rounded-md" />
-        <div className="h-4 w-72 bg-neutral-900 animate-pulse rounded-md" />
+        <div className="h-7 w-48 bg-neutral-900 rounded-md" />
+        <div className="h-4 w-72 bg-neutral-900 rounded-md" />
       </div>
       
       {/* Buscador de mentira (Skeleton) */}
-      <div className="h-11 w-full bg-neutral-900 animate-pulse rounded-2xl border border-neutral-800" />
+      <div className="h-11 w-full bg-neutral-900 rounded-2xl border border-neutral-800" />
       
       {/* Grid de comunidades */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
@@ -73,6 +73,7 @@ async function ExploreContent() {
     }
   }
 
+  // 1. Obtener comunidades activas
   try {
     dbCommunities = await db
       .select({
@@ -196,5 +197,90 @@ async function ExploreContent() {
     });
   }
 
-  return <ExploreClient initialCommunities={sortedCommunities} showPreferencesCTA={showPreferencesCTA} />;
+  // 3. Consultar los líderes de comunidades (Top 5)
+  // - Top por miembros
+  const topMembers = await db
+    .select({
+      id: communities.id,
+      displayName: communities.displayName,
+      slug: communities.slug,
+      avatarUrl: communities.avatarUrl,
+      count: sql<number>`count(${communityMembers.id})::int`
+    })
+    .from(communities)
+    .innerJoin(communityMembers, eq(communities.id, communityMembers.communityId))
+    .where(
+      and(
+        isNull(communities.deletedAt),
+        or(
+          eq(communityMembers.status, "APPROVED"),
+          eq(communityMembers.status, "approved")
+        )
+      )
+    )
+    .groupBy(communities.id, communities.displayName, communities.slug, communities.avatarUrl)
+    .orderBy(desc(sql`count(${communityMembers.id})`))
+    .limit(5);
+
+  // - Top por actividad (Aportes + Comentarios)
+  const topActivity = await db
+    .select({
+      id: communities.id,
+      displayName: communities.displayName,
+      slug: communities.slug,
+      avatarUrl: communities.avatarUrl,
+      count: sql<number>`(
+        select count(*)::int from ${posts} where ${posts.communityId} = ${communities.id} and ${posts.deletedAt} is null
+      ) + (
+        select count(*)::int from ${comments} 
+        inner join ${posts} on ${comments.postId} = ${posts.id} 
+        where ${posts.communityId} = ${communities.id} and ${comments.deletedAt} is null
+      )`
+    })
+    .from(communities)
+    .where(isNull(communities.deletedAt))
+    .orderBy(desc(sql`(
+        select count(*)::int from ${posts} where ${posts.communityId} = ${communities.id} and ${posts.deletedAt} is null
+      ) + (
+        select count(*)::int from ${comments} 
+        inner join ${posts} on ${comments.postId} = ${posts.id} 
+        where ${posts.communityId} = ${communities.id} and ${comments.deletedAt} is null
+      )`
+    ))
+    .limit(5);
+
+  // - Top por reputación acumulada
+  const topReputation = await db
+    .select({
+      id: communities.id,
+      displayName: communities.displayName,
+      slug: communities.slug,
+      avatarUrl: communities.avatarUrl,
+      count: sql<number>`coalesce(sum(${userReputation.score}), 0)::int`
+    })
+    .from(communities)
+    .innerJoin(communityMembers, eq(communities.id, communityMembers.communityId))
+    .innerJoin(userReputation, eq(communityMembers.userId, userReputation.userId))
+    .where(
+      and(
+        isNull(communities.deletedAt),
+        or(
+          eq(communityMembers.status, "APPROVED"),
+          eq(communityMembers.status, "approved")
+        )
+      )
+    )
+    .groupBy(communities.id, communities.displayName, communities.slug, communities.avatarUrl)
+    .orderBy(desc(sql`coalesce(sum(${userReputation.score}), 0)::int`))
+    .limit(5);
+
+  return (
+    <ExploreClient 
+      initialCommunities={sortedCommunities} 
+      showPreferencesCTA={showPreferencesCTA} 
+      topMembers={topMembers}
+      topActivity={topActivity}
+      topReputation={topReputation}
+    />
+  );
 }

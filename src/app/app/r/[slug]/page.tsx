@@ -125,6 +125,7 @@ export default async function CommunityDetailPage({ params }: Props) {
       authorName: profiles.displayName,
       authorAvatar: profiles.avatarUrl,
       authorReputation: userReputation.score,
+      authorUsername: profiles.username,
       commentsCount: sql<number>`(SELECT count(*)::int FROM ${comments} WHERE ${comments.postId} = ${posts.id} AND ${comments.deletedAt} IS NULL AND ${comments.status} = 'ACTIVE')`,
     })
     .from(posts)
@@ -318,6 +319,7 @@ export default async function CommunityDetailPage({ params }: Props) {
                       authorName={post.authorName}
                       authorAvatar={post.authorAvatar || undefined}
                       authorReputation={post.authorReputation || 0}
+                      authorUsername={post.authorUsername || undefined}
                       category={post.category || undefined}
                       tags={post.tags}
                       createdAt={timeAgo(post.createdAt)}

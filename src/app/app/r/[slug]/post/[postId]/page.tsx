@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth-helpers";
 import { CommentSection } from "@/components/shared/comment-section";
 import { MediaPreview } from "@/components/shared/media-preview";
 import { redirect, notFound } from "next/navigation";
+import { getUserLevel, getLevelBadge, getLevelColor } from "@/lib/reputation-rules";
 import { 
   ArrowLeft, 
   Calendar, 
@@ -62,6 +63,7 @@ export default async function PostDetailPage({ params }: Props) {
       authorBio: profiles.bio,
       authorWebsite: profiles.website,
       authorReputation: userReputation.score,
+      authorUsername: profiles.username,
     })
     .from(posts)
     .leftJoin(profiles, eq(profiles.userId, posts.authorId))
@@ -84,6 +86,7 @@ export default async function PostDetailPage({ params }: Props) {
   const authorBio = postResult.authorBio || "";
   const authorWebsite = postResult.authorWebsite || "";
   const authorReputation = postResult.authorReputation || 0;
+  const authorUsername = postResult.authorUsername || undefined;
 
   // 3. Validar accesibilidad de privacidad
   let isJoined = false;
@@ -191,6 +194,7 @@ export default async function PostDetailPage({ params }: Props) {
       authorName: profiles.displayName,
       authorAvatar: profiles.avatarUrl,
       authorReputation: userReputation.score,
+      authorUsername: profiles.username,
     })
     .from(comments)
     .leftJoin(profiles, eq(profiles.userId, comments.authorId))
@@ -239,6 +243,7 @@ export default async function PostDetailPage({ params }: Props) {
     authorName: c.authorName || "Usuario Desconocido",
     authorAvatar: c.authorAvatar || undefined,
     authorReputation: c.authorReputation || 0,
+    authorUsername: c.authorUsername || undefined,
     attachments: commentAttachmentsResult
       .filter((att) => att.targetId === c.id)
       .map((att) => ({
@@ -298,21 +303,43 @@ export default async function PostDetailPage({ params }: Props) {
           {/* Post Header Info */}
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-neutral-900 pb-5">
             <div className="flex items-center gap-2.5">
-              {authorAvatar ? (
-                <img
-                  src={authorAvatar}
-                  alt={authorName}
-                  className="h-9 w-9 rounded-full border border-neutral-850 object-cover"
-                />
+              {authorUsername ? (
+                <Link href={`/app/profile/${authorUsername}`} className="cursor-pointer shrink-0">
+                  {authorAvatar ? (
+                    <img
+                      src={authorAvatar}
+                      alt={authorName}
+                      className="h-9 w-9 rounded-full border border-neutral-850 object-cover hover:border-neutral-500 transition-colors"
+                    />
+                  ) : (
+                    <div className="h-9 w-9 rounded-full border border-neutral-850 bg-neutral-900 flex items-center justify-center text-sm font-semibold text-white hover:border-neutral-500 transition-colors">
+                      {authorName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </Link>
               ) : (
-                <div className="h-9 w-9 rounded-full border border-neutral-850 bg-neutral-900 flex items-center justify-center text-sm font-semibold text-white">
-                  {authorName.charAt(0).toUpperCase()}
-                </div>
+                authorAvatar ? (
+                  <img
+                    src={authorAvatar}
+                    alt={authorName}
+                    className="h-9 w-9 rounded-full border border-neutral-850 object-cover shrink-0"
+                  />
+                ) : (
+                  <div className="h-9 w-9 rounded-full border border-neutral-850 bg-neutral-900 flex items-center justify-center text-sm font-semibold text-white shrink-0">
+                    {authorName.charAt(0).toUpperCase()}
+                  </div>
+                )
               )}
-              <div className="flex flex-col">
-                <span className="text-xs font-semibold text-white">
-                  {authorName}
-                </span>
+              <div className="flex flex-col text-left">
+                {authorUsername ? (
+                  <Link href={`/app/profile/${authorUsername}`} className="text-xs font-semibold text-white hover:text-neutral-200 transition-colors">
+                    {authorName}
+                  </Link>
+                ) : (
+                  <span className="text-xs font-semibold text-white">
+                    {authorName}
+                  </span>
+                )}
                 <span className="text-[10px] text-neutral-500 mt-0.5">
                   Publicado el {postResult.createdAt.toLocaleDateString()}
                 </span>
@@ -388,23 +415,49 @@ export default async function PostDetailPage({ params }: Props) {
             </h3>
 
             <div className="flex items-center gap-3">
-              {authorAvatar ? (
-                <img
-                  src={authorAvatar}
-                  alt={authorName}
-                  className="h-10 w-10 rounded-full border border-neutral-850 object-cover"
-                />
+              {authorUsername ? (
+                <Link href={`/app/profile/${authorUsername}`} className="cursor-pointer shrink-0">
+                  {authorAvatar ? (
+                    <img
+                      src={authorAvatar}
+                      alt={authorName}
+                      className="h-10 w-10 rounded-full border border-neutral-850 object-cover hover:border-neutral-500 transition-colors"
+                    />
+                  ) : (
+                    <div className="h-10 w-10 rounded-full border border-neutral-850 bg-neutral-900 flex items-center justify-center text-sm font-semibold text-white hover:border-neutral-500 transition-colors">
+                      {authorName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </Link>
               ) : (
-                <div className="h-10 w-10 rounded-full border border-neutral-850 bg-neutral-900 flex items-center justify-center text-sm font-semibold text-white">
-                  {authorName.charAt(0).toUpperCase()}
-                </div>
+                authorAvatar ? (
+                  <img
+                    src={authorAvatar}
+                    alt={authorName}
+                    className="h-10 w-10 rounded-full border border-neutral-850 object-cover shrink-0"
+                  />
+                ) : (
+                  <div className="h-10 w-10 rounded-full border border-neutral-850 bg-neutral-900 flex items-center justify-center text-sm font-semibold text-white shrink-0">
+                    {authorName.charAt(0).toUpperCase()}
+                  </div>
+                )
               )}
-              <div className="flex flex-col">
-                <span className="text-xs font-semibold text-white">{authorName}</span>
-                <span className="inline-flex items-center gap-1 text-[9px] text-neutral-500 font-mono mt-0.5">
-                  <Award className="h-3 w-3 text-blue-500" />
-                  <span>{authorReputation} reputación</span>
-                </span>
+              <div className="flex flex-col text-left">
+                {authorUsername ? (
+                  <Link href={`/app/profile/${authorUsername}`} className="text-xs font-semibold text-white hover:text-neutral-200 transition-colors">
+                    {authorName}
+                  </Link>
+                ) : (
+                  <span className="text-xs font-semibold text-white">{authorName}</span>
+                )}
+                <div className="flex items-center gap-1.5 text-[10px] text-neutral-500 font-light mt-0.5">
+                  <span className={`inline-flex items-center gap-0.5 font-medium ${getLevelColor(authorReputation)}`}>
+                    <span>{getLevelBadge(authorReputation)}</span>
+                    <span>{getUserLevel(authorReputation)}</span>
+                  </span>
+                  <span className="text-neutral-800 select-none">&bull;</span>
+                  <span className="font-mono text-neutral-400">{authorReputation} pts</span>
+                </div>
               </div>
             </div>
 

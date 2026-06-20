@@ -6,6 +6,7 @@ import { eq, and, isNull, or, inArray } from "drizzle-orm";
 import { requireAuth, getUserCommunityRole } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { createNotificationTx } from "@/lib/notifications";
+import { awardBadgeTx } from "@/lib/reputation";
 import { deleteR2Objects } from "@/lib/r2";
 
 interface CreateCommunityInput {
@@ -75,6 +76,10 @@ export async function createCommunityAction(formData: CreateCommunityInput) {
         role: "COMMUNITY_ADMIN",
         status: "APPROVED",
       });
+
+      // 2.5 Otorga insignias de fundador y administrador
+      await awardBadgeTx(tx, user.id, "COMMUNITY_FOUNDER");
+      await awardBadgeTx(tx, user.id, "COMMUNITY_ADMIN");
 
       // 3. Crear log de auditoría
       await tx.insert(auditLogs).values({

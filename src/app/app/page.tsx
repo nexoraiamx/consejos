@@ -114,6 +114,7 @@ async function FeedSection({ currentUserId }: { currentUserId: string }) {
     authorName: string | null;
     authorAvatar: string | null;
     authorReputation: number | null;
+    authorUsername: string | null;
     communitySlug: string;
     communityName: string;
     commentsCount: number;
@@ -203,6 +204,7 @@ async function FeedSection({ currentUserId }: { currentUserId: string }) {
         authorName: profiles.displayName,
         authorAvatar: profiles.avatarUrl,
         authorReputation: userReputation.score,
+        authorUsername: profiles.username,
         communitySlug: communities.slug,
         communityName: communities.displayName,
         commentsCount: sql<number>`(SELECT count(*)::int FROM ${comments} WHERE ${comments.postId} = ${posts.id} AND ${comments.deletedAt} IS NULL AND ${comments.status} = 'ACTIVE')`,
@@ -274,6 +276,7 @@ async function FeedSection({ currentUserId }: { currentUserId: string }) {
             authorName={post.authorName || "Usuario"}
             authorAvatar={post.authorAvatar || undefined}
             authorReputation={post.authorReputation || 0}
+            authorUsername={post.authorUsername || undefined}
             category={post.category || undefined}
             tags={post.tags}
             createdAt={timeAgo(post.createdAt)}

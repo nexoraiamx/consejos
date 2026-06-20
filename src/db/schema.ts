@@ -384,3 +384,23 @@ export const communitySlugRedirects = pgTable(
   })
 );
 
+// 18. USER BADGES TABLE
+export const userBadges = pgTable(
+  "user_badges",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: varchar("user_id", { length: 256 })
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    badgeCode: varchar("badge_code", { length: 100 }).notNull(),
+    badgeName: varchar("badge_name", { length: 256 }).notNull(),
+    badgeIcon: varchar("badge_icon", { length: 100 }).notNull(),
+    awardedAt: timestamp("awarded_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    userBadgeUnique: unique("user_badge_unique").on(table.userId, table.badgeCode),
+    badgeUserIdx: index("badge_user_idx").on(table.userId),
+  })
+);
+
+

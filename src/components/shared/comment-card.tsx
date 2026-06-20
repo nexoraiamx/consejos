@@ -17,6 +17,8 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { ReportModal } from "./report-modal";
 import { MediaPreview } from "./media-preview";
+import { getUserLevel, getLevelBadge, getLevelColor } from "@/lib/reputation-rules";
+import Link from "next/link";
 import { Uploader } from "./uploader";
 import { AttachmentInput } from "@/app/actions/posts";
 
@@ -28,6 +30,7 @@ export interface CommentCardProps {
   authorName: string;
   authorAvatar?: string;
   authorReputation?: number;
+  authorUsername?: string;
   content: string;
   status: "ACTIVE" | "HIDDEN" | "DELETED";
   createdAt: string;
@@ -53,6 +56,7 @@ export function CommentCard({
   authorName,
   authorAvatar,
   authorReputation = 0,
+  authorUsername,
   content,
   status,
   createdAt,
@@ -156,23 +160,51 @@ export function CommentCard({
       {/* Header Info */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          {authorAvatar ? (
-            <img
-              src={authorAvatar}
-              alt={authorName}
-              className="h-6 w-6 rounded-full border border-neutral-850 object-cover"
-            />
+          {authorUsername ? (
+            <Link href={`/app/profile/${authorUsername}`} className="cursor-pointer shrink-0">
+              {authorAvatar ? (
+                <img
+                  src={authorAvatar}
+                  alt={authorName}
+                  className="h-6 w-6 rounded-full border border-neutral-850 object-cover hover:border-neutral-500 transition-colors"
+                />
+              ) : (
+                <div className="h-6 w-6 rounded-full border border-neutral-850 bg-neutral-900 flex items-center justify-center text-[10px] font-semibold text-white hover:border-neutral-500 transition-colors">
+                  {authorName.charAt(0).toUpperCase()}
+                </div>
+              )}
+            </Link>
           ) : (
-            <div className="h-6 w-6 rounded-full border border-neutral-850 bg-neutral-900 flex items-center justify-center text-[10px] font-semibold text-white">
-              {authorName.charAt(0).toUpperCase()}
-            </div>
+            authorAvatar ? (
+              <img
+                src={authorAvatar}
+                alt={authorName}
+                className="h-6 w-6 rounded-full border border-neutral-850 object-cover shrink-0"
+              />
+            ) : (
+              <div className="h-6 w-6 rounded-full border border-neutral-850 bg-neutral-900 flex items-center justify-center text-[10px] font-semibold text-white shrink-0">
+                {authorName.charAt(0).toUpperCase()}
+              </div>
+            )
           )}
-          <span className="text-xs font-semibold text-neutral-200">{authorName}</span>
           
-          {/* Reputación */}
-          <span className="inline-flex items-center gap-0.5 text-[9px] text-neutral-500 font-mono">
-            <Award className="h-3 w-3 text-blue-500/60" />
-            <span>{authorReputation} rep</span>
+          {authorUsername ? (
+            <Link 
+              href={`/app/profile/${authorUsername}`}
+              className="text-xs font-semibold text-neutral-200 hover:text-white transition-colors"
+            >
+              {authorName}
+            </Link>
+          ) : (
+            <span className="text-xs font-semibold text-neutral-200">{authorName}</span>
+          )}
+          
+          {/* Nivel y Reputación */}
+          <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${getLevelColor(authorReputation)}`}>
+            <span>{getLevelBadge(authorReputation)}</span>
+            <span>{getUserLevel(authorReputation)}</span>
+            <span className="text-neutral-700 font-light select-none mx-0.5">&middot;</span>
+            <span className="font-mono">{authorReputation} pts</span>
           </span>
 
           <span className="text-[10px] text-neutral-700">&bull;</span>

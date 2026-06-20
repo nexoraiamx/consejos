@@ -24,6 +24,7 @@ import { softDeletePostAction, hidePostAction, unhidePostAction } from "@/app/ac
 import Link from "next/link";
 import { ReportModal } from "./report-modal";
 import { MediaPreview } from "./media-preview";
+import { getUserLevel, getLevelBadge, getLevelColor } from "@/lib/reputation-rules";
 
 interface Attachment {
   id: string;
@@ -42,6 +43,7 @@ export interface PostCardProps {
   authorName: string;
   authorAvatar?: string;
   authorReputation?: number;
+  authorUsername?: string;
   category?: string;
   tags?: string[];
   createdAt: string;
@@ -65,6 +67,7 @@ export function PostCard({
   authorName,
   authorAvatar,
   authorReputation = 0,
+  authorUsername,
   category,
   tags = [],
   createdAt,
@@ -182,18 +185,34 @@ export function PostCard({
       {/* Header Info */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {authorAvatar ? (
-            <img
-              src={authorAvatar}
-              alt={authorName}
-              className="h-8 w-8 rounded-full border border-neutral-800 object-cover"
-            />
+          {authorUsername ? (
+            <Link href={`/app/profile/${authorUsername}`} className="cursor-pointer shrink-0">
+              {authorAvatar ? (
+                <img
+                  src={authorAvatar}
+                  alt={authorName}
+                  className="h-8 w-8 rounded-full border border-neutral-800 object-cover hover:border-neutral-500 transition-colors"
+                />
+              ) : (
+                <div className="h-8 w-8 rounded-full border border-neutral-800 bg-neutral-900 flex items-center justify-center text-xs font-semibold text-white hover:border-neutral-500 transition-colors">
+                  {authorName.charAt(0).toUpperCase()}
+                </div>
+              )}
+            </Link>
           ) : (
-            <div className="h-8 w-8 rounded-full border border-neutral-800 bg-neutral-900 flex items-center justify-center text-xs font-semibold text-white">
-              {authorName.charAt(0).toUpperCase()}
-            </div>
+            authorAvatar ? (
+              <img
+                src={authorAvatar}
+                alt={authorName}
+                className="h-8 w-8 rounded-full border border-neutral-800 object-cover shrink-0"
+              />
+            ) : (
+              <div className="h-8 w-8 rounded-full border border-neutral-800 bg-neutral-900 flex items-center justify-center text-xs font-semibold text-white shrink-0">
+                {authorName.charAt(0).toUpperCase()}
+              </div>
+            )
           )}
-          <div className="flex flex-col">
+          <div className="flex flex-col text-left">
             <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
               <Link 
                 href={`/app/r/${communitySlug}`}
@@ -202,14 +221,28 @@ export function PostCard({
                 r/{communitySlug}
               </Link>
               <span className="text-[10px] text-neutral-600">&bull;</span>
-              <span className="text-xs text-neutral-400">{authorName}</span>
-              
-              {/* Reputación del Autor */}
-              <span className="inline-flex items-center gap-0.5 text-[9px] text-neutral-500 font-mono">
-                <Award className="h-2.5 w-2.5 text-blue-500/60" />
-                <span>{authorReputation} rep</span>
-              </span>
+              {authorUsername ? (
+                <Link 
+                  href={`/app/profile/${authorUsername}`}
+                  className="text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
+                >
+                  {authorName}
+                </Link>
+              ) : (
+                <span className="text-xs text-neutral-400">{authorName}</span>
+              )}
             </div>
+            
+            {/* Reputación y nivel del Autor */}
+            <div className="flex items-center gap-1.5 text-[10px] text-neutral-500 font-light mt-0.5">
+              <span className={`inline-flex items-center gap-0.5 font-medium ${getLevelColor(authorReputation)}`}>
+                <span>{getLevelBadge(authorReputation)}</span>
+                <span>{getUserLevel(authorReputation)}</span>
+              </span>
+              <span className="text-neutral-800 select-none">&bull;</span>
+              <span className="font-mono text-neutral-400">{authorReputation} pts</span>
+            </div>
+            
             <span className="text-[10px] text-neutral-500 mt-0.5">{createdAt}</span>
           </div>
         </div>

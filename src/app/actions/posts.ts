@@ -5,6 +5,7 @@ import { posts, communities, communityMembers, auditLogs, attachments } from "@/
 import { eq, and, isNull } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
+import { checkAndAwardFirstPostBadge } from "@/lib/reputation";
 import { createNotificationTx } from "@/lib/notifications";
 
 export interface AttachmentInput {
@@ -112,6 +113,9 @@ export async function createPostAction(formData: PostInput) {
           }))
         );
       }
+
+      // Insignias automáticas
+      await checkAndAwardFirstPostBadge(tx, user.id);
 
       // Log de auditoría
       await tx.insert(auditLogs).values({
