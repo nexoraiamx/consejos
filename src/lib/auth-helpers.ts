@@ -1,5 +1,5 @@
 import { auth, currentUser as getClerkUser } from "@clerk/nextjs/server";
-import { db } from "@/db";
+import { db, poolDb } from "@/db";
 import { users, profiles, userReputation, communityMembers } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { redirect } from "next/navigation";
@@ -54,8 +54,8 @@ export async function getCurrentUser() {
             displayName = email.split("@")[0];
           }
 
-          // Insertar registro completo transaccionalmente usando db (HTTP) para evitar colgar el pool
-          await db.transaction(async (tx) => {
+          // Insertar registro completo transaccionalmente usando poolDb (WebSocket Pool) para soportar transacciones
+          await poolDb.transaction(async (tx) => {
             await tx.insert(users).values({
               id: userId,
               email,

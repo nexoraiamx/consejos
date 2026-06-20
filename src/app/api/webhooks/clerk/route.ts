@@ -1,7 +1,7 @@
 import { Webhook } from "svix";
 import { headers } from "next/headers";
 import { WebhookEvent } from "@clerk/nextjs/server";
-import { db } from "@/db";
+import { db, poolDb } from "@/db";
 import { users, profiles, userReputation } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 
@@ -136,7 +136,7 @@ export async function POST(req: Request) {
       }
 
       // Run transactional insert for user + profile + reputation
-      await db.transaction(async (tx) => {
+      await poolDb.transaction(async (tx) => {
         // 1. Insert user
         await tx.insert(users).values({
           id: data.id,
@@ -189,7 +189,7 @@ export async function POST(req: Request) {
       }
 
       // Run transactional update
-      await db.transaction(async (tx) => {
+      await poolDb.transaction(async (tx) => {
         // 1. Update user
         await tx
           .update(users)
