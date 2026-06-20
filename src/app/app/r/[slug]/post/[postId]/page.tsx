@@ -32,6 +32,12 @@ export const dynamic = "force-dynamic";
 
 export default async function PostDetailPage({ params }: Props) {
   const { slug, postId } = await params;
+
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(postId)) {
+    notFound();
+  }
+
   const currentUser = await getCurrentUser();
 
   // 1. Obtener detalles de la comunidad
@@ -66,7 +72,7 @@ export default async function PostDetailPage({ params }: Props) {
       authorReputation: userReputation.score,
     })
     .from(posts)
-    .innerJoin(profiles, eq(profiles.userId, posts.authorId))
+    .leftJoin(profiles, eq(profiles.userId, posts.authorId))
     .leftJoin(userReputation, eq(userReputation.userId, posts.authorId))
     .where(
       and(
@@ -80,6 +86,12 @@ export default async function PostDetailPage({ params }: Props) {
   if (!postResult) {
     notFound();
   }
+
+  const authorName = postResult.authorName || "Usuario Desconocido";
+  const authorAvatar = postResult.authorAvatar || undefined;
+  const authorBio = postResult.authorBio || "";
+  const authorWebsite = postResult.authorWebsite || "";
+  const authorReputation = postResult.authorReputation || 0;
 
   // 3. Validar accesibilidad de privacidad
   let isJoined = false;
@@ -136,7 +148,7 @@ export default async function PostDetailPage({ params }: Props) {
       authorReputation: userReputation.score,
     })
     .from(comments)
-    .innerJoin(profiles, eq(profiles.userId, comments.authorId))
+    .leftJoin(profiles, eq(profiles.userId, comments.authorId))
     .leftJoin(userReputation, eq(userReputation.userId, comments.authorId))
     .where(
       and(
@@ -197,7 +209,7 @@ export default async function PostDetailPage({ params }: Props) {
     content: c.content,
     status: c.status as "ACTIVE" | "HIDDEN" | "DELETED",
     createdAt: c.createdAt.toLocaleDateString() + " " + c.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    authorName: c.authorName,
+    authorName: c.authorName || "Usuario Desconocido",
     authorAvatar: c.authorAvatar || undefined,
     authorReputation: c.authorReputation || 0,
     attachments: commentAttachmentsResult
@@ -259,20 +271,20 @@ export default async function PostDetailPage({ params }: Props) {
           {/* Post Header Info */}
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-neutral-900 pb-5">
             <div className="flex items-center gap-2.5">
-              {postResult.authorAvatar ? (
+              {authorAvatar ? (
                 <img
-                  src={postResult.authorAvatar}
-                  alt={postResult.authorName}
+                  src={authorAvatar}
+                  alt={authorName}
                   className="h-9 w-9 rounded-full border border-neutral-850 object-cover"
                 />
               ) : (
                 <div className="h-9 w-9 rounded-full border border-neutral-850 bg-neutral-900 flex items-center justify-center text-sm font-semibold text-white">
-                  {postResult.authorName.charAt(0).toUpperCase()}
+                  {authorName.charAt(0).toUpperCase()}
                 </div>
               )}
               <div className="flex flex-col">
                 <span className="text-xs font-semibold text-white">
-                  {postResult.authorName}
+                  {authorName}
                 </span>
                 <span className="text-[10px] text-neutral-500 mt-0.5">
                   Publicado el {postResult.createdAt.toLocaleDateString()}
@@ -326,7 +338,7 @@ export default async function PostDetailPage({ params }: Props) {
           {/* Comentarios interactivos */}
           <CommentSection
             postId={postResult.id}
-            postAuthorId={postResult.authorId}
+            postAuthorId={postResult.authorId || ""}
             communityId={community.id}
             initialComments={formattedComments}
             currentUserId={currentUser?.id}
@@ -349,40 +361,40 @@ export default async function PostDetailPage({ params }: Props) {
             </h3>
 
             <div className="flex items-center gap-3">
-              {postResult.authorAvatar ? (
+              {authorAvatar ? (
                 <img
-                  src={postResult.authorAvatar}
-                  alt={postResult.authorName}
+                  src={authorAvatar}
+                  alt={authorName}
                   className="h-10 w-10 rounded-full border border-neutral-850 object-cover"
                 />
               ) : (
                 <div className="h-10 w-10 rounded-full border border-neutral-850 bg-neutral-900 flex items-center justify-center text-sm font-semibold text-white">
-                  {postResult.authorName.charAt(0).toUpperCase()}
+                  {authorName.charAt(0).toUpperCase()}
                 </div>
               )}
               <div className="flex flex-col">
-                <span className="text-xs font-semibold text-white">{postResult.authorName}</span>
+                <span className="text-xs font-semibold text-white">{authorName}</span>
                 <span className="inline-flex items-center gap-1 text-[9px] text-neutral-500 font-mono mt-0.5">
                   <Award className="h-3 w-3 text-blue-500" />
-                  <span>{postResult.authorReputation || 0} reputación</span>
+                  <span>{authorReputation} reputación</span>
                 </span>
               </div>
             </div>
 
-            {postResult.authorBio && (
+            {authorBio && (
               <p className="text-xs text-neutral-400 font-light leading-relaxed mt-1">
-                {postResult.authorBio}
+                {authorBio}
               </p>
             )}
 
-            {postResult.authorWebsite && (
+            {authorWebsite && (
               <a
-                href={postResult.authorWebsite}
+                href={authorWebsite}
                 target="_blank"
                 rel="noreferrer"
                 className="text-[11px] text-blue-400 hover:underline mt-1 truncate"
               >
-                {postResult.authorWebsite.replace(/^https?:\/\//, "")}
+                {authorWebsite.replace(/^https?:\/\//, "")}
               </a>
             )}
           </div>

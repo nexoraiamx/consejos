@@ -60,6 +60,13 @@ export function MediaPreview({ attachments }: MediaPreviewProps) {
                     download={fileName}
                     target="_blank"
                     rel="noreferrer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (fileUrl === "#" || !fileUrl) {
+                        e.preventDefault();
+                        alert("Este es un archivo de demostración. La descarga real requiere configurar Cloudflare R2.");
+                      }
+                    }}
                     className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-colors"
                   >
                     <Download className="h-3.5 w-3.5" />
@@ -113,6 +120,13 @@ export function MediaPreview({ attachments }: MediaPreviewProps) {
               href={fileUrl}
               target="_blank"
               rel="noreferrer"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (fileUrl === "#" || !fileUrl) {
+                  e.preventDefault();
+                  alert("Este es un archivo de demostración. La descarga real requiere configurar Cloudflare R2.");
+                }
+              }}
               className="p-4 rounded-2xl border border-neutral-900 bg-neutral-950/30 hover:bg-neutral-950/60 hover:border-neutral-800 transition-all flex items-center justify-between gap-4 max-w-md group"
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -150,6 +164,13 @@ export function MediaPreview({ attachments }: MediaPreviewProps) {
               href={fileUrl}
               target="_blank"
               rel="noreferrer"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (fileUrl === "#" || !fileUrl) {
+                  e.preventDefault();
+                  alert("Este es un enlace de demostración.");
+                }
+              }}
               className="p-4 rounded-2xl border border-neutral-900 bg-neutral-950/30 hover:bg-neutral-950/60 hover:border-neutral-800 transition-all flex items-center justify-between gap-4 max-w-md group"
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -179,6 +200,13 @@ export function MediaPreview({ attachments }: MediaPreviewProps) {
             href={fileUrl}
             target="_blank"
             rel="noreferrer"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (fileUrl === "#" || !fileUrl) {
+                e.preventDefault();
+                alert("Este es un archivo de demostración. La descarga real requiere configurar Cloudflare R2.");
+              }
+            }}
             className="p-4 rounded-2xl border border-neutral-900 bg-neutral-950/30 hover:bg-neutral-950/60 hover:border-neutral-800 transition-all flex items-center justify-between gap-4 max-w-md group"
           >
             <div className="flex items-center gap-3 min-w-0">

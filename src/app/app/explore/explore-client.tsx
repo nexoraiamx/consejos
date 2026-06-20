@@ -17,9 +17,9 @@ interface CommunityData {
 }
 
 export default function ExploreClient({
-  initialCommunities,
+  initialCommunities = [],
 }: {
-  initialCommunities: CommunityData[];
+  initialCommunities?: CommunityData[];
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("Todos");
@@ -32,7 +32,7 @@ export default function ExploreClient({
   ];
 
   // Filtros heurísticos locales según palabras clave en slug y descripción
-  const filteredCommunities = initialCommunities.filter((comm) => {
+  const filteredCommunities = (initialCommunities || []).filter((comm) => {
     const matchesSearch =
       comm.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       comm.slug.toLowerCase().includes(searchQuery.toLowerCase()) ||

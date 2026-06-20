@@ -1,20 +1,89 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser as getClerkUser } from "@clerk/nextjs/server";
 import { db } from "@/db";
-import { users, communityMembers } from "@/db/schema";
+import { users, profiles, userReputation, communityMembers } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { redirect } from "next/navigation";
 
 /**
  * Obtiene el usuario actual registrado en Neon DB a partir de la sesión de Clerk.
+ * Cuenta con un mecanismo de auto-aprovisionamiento seguro por si el webhook de Clerk falla.
  */
 export async function getCurrentUser() {
   const { userId } = await auth();
   if (!userId) return null;
 
   try {
-    const user = await db.query.users.findFirst({
+    let user = await db.query.users.findFirst({
       where: eq(users.id, userId),
     });
+
+    if (!user) {
+      console.log(`[Auto-Aprovisionamiento] Usuario ${userId} no existe en Neon DB. Sincronizando...`);
+      const clerkUser = await getClerkUser();
+      if (clerkUser) {
+        const primaryEmailObj = clerkUser.emailAddresses.find(
+          (email) => email.id === clerkUser.primaryEmailAddressId
+        ) || clerkUser.emailAddresses[0];
+        
+        const email = primaryEmailObj ? primaryEmailObj.emailAddress : "";
+        if (email) {
+          // Generar username único
+          let baseUsername = clerkUser.username || email.split("@")[0].toLowerCase().replace(/[^a-z0-9]/g, "");
+          if (!baseUsername || baseUsername.length < 2) {
+            baseUsername = "user";
+          }
+          let username = baseUsername;
+          let isUnique = false;
+          let counter = 0;
+          while (!isUnique) {
+            const existing = await db
+              .select({ username: profiles.username })
+              .from(profiles)
+              .where(eq(profiles.username, username))
+              .limit(1);
+            if (existing.length === 0) {
+              isUnique = true;
+            } else {
+              counter++;
+              username = `${baseUsername}${counter}`;
+            }
+          }
+
+          let displayName = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ");
+          if (!displayName) {
+            displayName = email.split("@")[0];
+          }
+
+          // Insertar registro completo transaccionalmente usando db (HTTP) para evitar colgar el pool
+          await db.transaction(async (tx) => {
+            await tx.insert(users).values({
+              id: userId,
+              email,
+              globalRole: "MEMBER",
+              isSuspended: false,
+            });
+            await tx.insert(profiles).values({
+              userId,
+              displayName,
+              username,
+              avatarUrl: clerkUser.imageUrl,
+            });
+            await tx.insert(userReputation).values({
+              userId,
+              score: 0,
+              level: 1,
+            });
+          });
+
+          // Volver a consultar
+          user = await db.query.users.findFirst({
+            where: eq(users.id, userId),
+          });
+          console.log(`[Auto-Aprovisionamiento] Registro creado para ${userId}`);
+        }
+      }
+    }
+
     return user || null;
   } catch (error) {
     console.error("Error al obtener el usuario actual desde Neon:", error);

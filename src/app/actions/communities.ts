@@ -93,6 +93,12 @@ export async function createCommunityAction(formData: CreateCommunityInput) {
  * Server Action para unirse o salirse (leave) de una comunidad.
  */
 export async function toggleJoinCommunityAction(communityId: string) {
+  // Validar formato UUID de la comunidad
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(communityId)) {
+    return { success: false, error: "ID de comunidad no válido." };
+  }
+
   const user = await requireAuth();
 
   // Verificar que la comunidad exista
@@ -117,6 +123,13 @@ export async function toggleJoinCommunityAction(communityId: string) {
 
   try {
     if (existingMember) {
+      if (existingMember.status === "BANNED") {
+        return {
+          success: false,
+          error: "Acceso denegado: Has sido suspendido o bloqueado de esta comunidad."
+        };
+      }
+
       // Si ya es miembro, se sale
       if (existingMember.role === "COMMUNITY_ADMIN") {
         return {

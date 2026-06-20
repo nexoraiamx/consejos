@@ -13,6 +13,12 @@ export const dynamic = "force-dynamic";
 
 export default async function EditPostPage({ params }: Props) {
   const { slug, postId } = await params;
+
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(postId)) {
+    notFound();
+  }
+
   const user = await getCurrentUser();
 
   // Forzar login

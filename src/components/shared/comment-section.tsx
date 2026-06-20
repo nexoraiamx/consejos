@@ -54,25 +54,26 @@ export function CommentSection({
   acceptedAnswerId: initialAcceptedAnswerId = null,
   postStatus = "ACTIVE",
 }: CommentSectionProps) {
-  const [commentsList, setCommentsList] = useState<DBComment[]>(initialComments);
+  const [commentsList, setCommentsList] = useState<DBComment[]>(initialComments || []);
   const [acceptedAnswerId, setAcceptedAnswerId] = useState<string | null>(initialAcceptedAnswerId);
   const [rootCommentText, setRootCommentText] = useState("");
   const [rootAttachments, setRootAttachments] = useState<AttachmentInput[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-
+ 
   const isPostAuthor = currentUserId === postAuthorId;
   const isPostInactive = postStatus === "DELETED" || postStatus === "HIDDEN";
-
+ 
   // Construir árbol de comentarios
   const buildCommentTree = (flat: DBComment[]) => {
     const map: Record<string, any> = {};
     const roots: any[] = [];
-
+    if (!flat || !Array.isArray(flat)) return [];
+ 
     flat.forEach((c) => {
       map[c.id] = { ...c, replies: [] };
     });
-
+ 
     flat.forEach((c) => {
       const mapped = map[c.id];
       if (c.parentId && map[c.parentId]) {
@@ -81,11 +82,11 @@ export function CommentSection({
         roots.push(mapped);
       }
     });
-
+ 
     return roots;
   };
-
-  const commentTree = buildCommentTree(commentsList);
+ 
+  const commentTree = buildCommentTree(commentsList || []);
 
   const handlePostRootComment = async () => {
     if (!rootCommentText.trim()) return;
