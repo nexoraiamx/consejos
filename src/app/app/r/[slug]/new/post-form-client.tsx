@@ -27,11 +27,23 @@ export default function PostFormClient({
   const [attachments, setAttachments] = useState<AttachmentInput[]>([]);
   
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [hasUploadError, setHasUploadError] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return;
+
+    if (isUploading) {
+      setErrorMessage("Por favor espera a que terminen de subirse todos los archivos.");
+      return;
+    }
+
+    if (hasUploadError) {
+      setErrorMessage("Hay archivos con error de subida. Por favor elimínalos o reintenta la subida antes de publicar.");
+      return;
+    }
 
     setErrorMessage(null);
     setIsLoading(true);
@@ -236,11 +248,25 @@ export default function PostFormClient({
             targetType="POST"
             value={attachments}
             onChange={setAttachments}
+            onUploadStatusChange={({ isUploading, hasError }) => {
+              setIsUploading(isUploading);
+              setHasUploadError(hasError);
+            }}
           />
         </div>
 
         {/* Botones de Acción */}
         <div className="flex items-center justify-end gap-3 pt-6 border-t border-neutral-900">
+          {isUploading && (
+            <span className="text-[11px] text-blue-450 animate-pulse font-light mr-auto">
+              Subiendo archivos en segundo plano...
+            </span>
+          )}
+          {hasUploadError && (
+            <span className="text-[11px] text-red-400 font-medium mr-auto">
+              Corrige las subidas fallidas antes de publicar.
+            </span>
+          )}
           <Link
             href={`/app/r/${communitySlug}`}
             className="rounded-full bg-neutral-950 border border-neutral-900 text-neutral-400 px-5 py-2.5 text-xs font-semibold hover:bg-neutral-900 hover:text-white transition-colors cursor-pointer"
@@ -249,13 +275,18 @@ export default function PostFormClient({
           </Link>
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || isUploading || hasUploadError}
             className="inline-flex items-center gap-2 rounded-full bg-white text-neutral-950 px-5 py-2.5 text-xs font-semibold hover:bg-neutral-200 transition-all cursor-pointer shadow-md shadow-white/5 disabled:opacity-50 min-w-[130px] justify-center"
           >
             {isLoading ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 <span>Guardando...</span>
+              </>
+            ) : isUploading ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-neutral-500" />
+                <span>Subiendo...</span>
               </>
             ) : (
               <>

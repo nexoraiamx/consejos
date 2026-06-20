@@ -2,7 +2,7 @@
 
 import { db, poolDb } from "@/db";
 import { reports, posts, comments, communityMembers, users, auditLogs, communities } from "@/db/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, or } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { createNotification, createNotificationTx } from "@/lib/notifications";
@@ -31,7 +31,7 @@ async function getTargetCommunityId(targetType: string, targetId: string) {
 }
 
 // Helper para verificar si el usuario tiene privilegios de moderación en la comunidad o a nivel global
-async function checkModerationPermission(user: any, communityId: string | null) {
+async function checkModerationPermission(user: Awaited<ReturnType<typeof requireAuth>>, communityId: string | null) {
   if (user.globalRole === "GLOBAL_ADMIN") {
     return true;
   }
@@ -42,10 +42,13 @@ async function checkModerationPermission(user: any, communityId: string | null) 
     where: and(
       eq(communityMembers.communityId, communityId),
       eq(communityMembers.userId, user.id),
-      eq(communityMembers.status, "APPROVED")
+      or(
+        eq(communityMembers.status, "APPROVED"),
+        eq(communityMembers.status, "approved")
+      )
     ),
   });
-  return membership && (membership.role === "COMMUNITY_ADMIN" || membership.role === "MODERATOR");
+  return membership && (membership.role.toLowerCase() === "owner" || membership.role === "COMMUNITY_ADMIN" || membership.role === "MODERATOR");
 }
 
 interface ReportInput {
@@ -150,7 +153,7 @@ export async function createReportAction(formData: ReportInput) {
     }
 
     return { success: true, reportId: newReport.id };
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error al crear reporte:", error);
     return { success: false, error: "Error interno del servidor al procesar el reporte." };
   }
@@ -207,7 +210,7 @@ export async function resolveReportAction(reportId: string, resolutionNotes: str
     revalidatePath("/app/admin");
 
     return { success: true };
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error al resolver reporte:", error);
     return { success: false, error: "Error interno del servidor al resolver reporte." };
   }
@@ -263,7 +266,7 @@ export async function dismissReportAction(reportId: string, resolutionNotes: str
     revalidatePath("/app/admin");
 
     return { success: true };
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error al descartar reporte:", error);
     return { success: false, error: "Error interno del servidor al descartar reporte." };
   }
@@ -376,7 +379,7 @@ export async function hideReportedContentAction(reportId: string) {
     revalidatePath("/app");
 
     return { success: true };
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error al ocultar contenido reportado:", error);
     return { success: false, error: "Error interno del servidor al ocultar el contenido." };
   }
@@ -427,7 +430,7 @@ export async function suspendUserAction(userId: string, reason: string) {
 
     revalidatePath("/app/admin");
     return { success: true };
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error al suspender usuario:", error);
     return { success: false, error: "Error interno al suspender usuario." };
   }
@@ -478,7 +481,7 @@ export async function unsuspendUserAction(userId: string) {
 
     revalidatePath("/app/admin");
     return { success: true };
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error al restaurar usuario:", error);
     return { success: false, error: "Error interno al restaurar usuario." };
   }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { db } from "@/db";
 import { communityMembers, communities } from "@/db/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, or } from "drizzle-orm";
 import { s3Client, validateFile, generateFileKey } from "@/lib/r2";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -70,7 +70,10 @@ export async function POST(req: NextRequest) {
         where: and(
           eq(communityMembers.communityId, communityId),
           eq(communityMembers.userId, user.id),
-          eq(communityMembers.status, "APPROVED")
+          or(
+            eq(communityMembers.status, "APPROVED"),
+            eq(communityMembers.status, "approved")
+          )
         ),
       });
 
@@ -103,6 +106,8 @@ export async function POST(req: NextRequest) {
 
     const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 600 });
 
+    console.log(`[PRESIGN_API] Signed URL creada exitosamente para el archivo: "${fileName}" con key: "${key}"`);
+
     return NextResponse.json({
       success: true,
       uploadUrl,
@@ -110,7 +115,7 @@ export async function POST(req: NextRequest) {
       fileKey: key,
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error al generar presigned URL:", error);
     return NextResponse.json(
       { error: "Error interno del servidor al procesar la firma de subida." },

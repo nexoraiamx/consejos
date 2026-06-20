@@ -52,8 +52,8 @@ export async function createCommentAction(formData: CreateCommentInput) {
     });
     
     const isLocalModOrAdmin = membership && 
-      (membership.role === "COMMUNITY_ADMIN" || membership.role === "MODERATOR") && 
-      membership.status === "APPROVED";
+      (membership.role.toLowerCase() === "owner" || membership.role === "COMMUNITY_ADMIN" || membership.role === "MODERATOR") && 
+      membership.status.toUpperCase() === "APPROVED";
 
     if (!isLocalModOrAdmin) {
       return { success: false, error: "No puedes comentar en una publicación oculta." };
@@ -69,7 +69,7 @@ export async function createCommentAction(formData: CreateCommentInput) {
       ),
     });
 
-    if (!membership || membership.status !== "APPROVED") {
+    if (!membership || membership.status.toUpperCase() !== "APPROVED") {
       return {
         success: false,
         error: "No tienes permiso para comentar en esta comunidad. Debes ser un miembro aprobado."
@@ -335,8 +335,8 @@ export async function hideCommentAction(commentId: string) {
 
     if (
       membership && 
-      (membership.role === "COMMUNITY_ADMIN" || membership.role === "MODERATOR") && 
-      membership.status === "APPROVED"
+      (membership.role.toLowerCase() === "owner" || membership.role === "COMMUNITY_ADMIN" || membership.role === "MODERATOR") && 
+      membership.status.toUpperCase() === "APPROVED"
     ) {
       isAllowed = true;
     }
@@ -415,8 +415,8 @@ export async function unhideCommentAction(commentId: string) {
 
     if (
       membership && 
-      (membership.role === "COMMUNITY_ADMIN" || membership.role === "MODERATOR") && 
-      membership.status === "APPROVED"
+      (membership.role.toLowerCase() === "owner" || membership.role === "COMMUNITY_ADMIN" || membership.role === "MODERATOR") && 
+      membership.status.toUpperCase() === "APPROVED"
     ) {
       isAllowed = true;
     }

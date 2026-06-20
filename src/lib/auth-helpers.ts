@@ -119,8 +119,8 @@ export async function getUserCommunityRole(userId: string, communityId: string) 
     });
     if (!member) return null;
     return {
-      role: member.role as "COMMUNITY_ADMIN" | "MODERATOR" | "MEMBER",
-      status: member.status as "PENDING" | "APPROVED" | "BANNED",
+      role: member.role as "owner" | "COMMUNITY_ADMIN" | "MODERATOR" | "MEMBER",
+      status: member.status as "approved" | "APPROVED" | "PENDING" | "BANNED",
     };
   } catch (error) {
     console.error("Error al obtener rol del usuario en la comunidad:", error);
@@ -130,7 +130,7 @@ export async function getUserCommunityRole(userId: string, communityId: string) 
 
 /**
  * Valida si un usuario tiene permisos de administración sobre una comunidad.
- * Retorna true si es COMMUNITY_ADMIN aprobado o si tiene el rol GLOBAL_ADMIN.
+ * Retorna true si es owner o COMMUNITY_ADMIN aprobado o si tiene el rol GLOBAL_ADMIN.
  */
 export async function canManageCommunity(userId: string, communityId: string) {
   try {
@@ -140,7 +140,11 @@ export async function canManageCommunity(userId: string, communityId: string) {
     if (user?.globalRole === "GLOBAL_ADMIN") return true;
 
     const roleInfo = await getUserCommunityRole(userId, communityId);
-    return roleInfo?.role === "COMMUNITY_ADMIN" && roleInfo?.status === "APPROVED";
+    if (!roleInfo) return false;
+
+    const role = roleInfo.role.toLowerCase();
+    const status = roleInfo.status.toUpperCase();
+    return (role === "owner" || role === "community_admin") && status === "APPROVED";
   } catch (error) {
     console.error("Error en validación de gestión de comunidad:", error);
     return false;

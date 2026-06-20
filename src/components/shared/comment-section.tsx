@@ -25,7 +25,12 @@ interface DBComment {
   content: string;
   status: "ACTIVE" | "HIDDEN" | "DELETED";
   createdAt: string;
-  attachments?: any[];
+  attachments?: AttachmentInput[];
+}
+
+interface DBCommentTreeItem extends DBComment {
+  communityId: string;
+  replies: DBCommentTreeItem[];
 }
 
 interface CommentSectionProps {
@@ -58,20 +63,22 @@ export function CommentSection({
   const [acceptedAnswerId, setAcceptedAnswerId] = useState<string | null>(initialAcceptedAnswerId);
   const [rootCommentText, setRootCommentText] = useState("");
   const [rootAttachments, setRootAttachments] = useState<AttachmentInput[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [hasUploadError, setHasUploadError] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
- 
+  
   const isPostAuthor = currentUserId === postAuthorId;
   const isPostInactive = postStatus === "DELETED" || postStatus === "HIDDEN";
  
   // Construir árbol de comentarios
   const buildCommentTree = (flat: DBComment[]) => {
-    const map: Record<string, any> = {};
-    const roots: any[] = [];
+    const map: Record<string, DBCommentTreeItem> = {};
+    const roots: DBCommentTreeItem[] = [];
     if (!flat || !Array.isArray(flat)) return [];
  
     flat.forEach((c) => {
-      map[c.id] = { ...c, replies: [] };
+      map[c.id] = { ...c, communityId, replies: [] };
     });
  
     flat.forEach((c) => {
@@ -90,6 +97,14 @@ export function CommentSection({
 
   const handlePostRootComment = async () => {
     if (!rootCommentText.trim()) return;
+    if (isUploading) {
+      setErrorMsg("Espera a que terminen de subirse los archivos.");
+      return;
+    }
+    if (hasUploadError) {
+      setErrorMsg("Corrige las subidas fallidas antes de comentar.");
+      return;
+    }
     setErrorMsg(null);
 
     startTransition(async () => {
@@ -121,8 +136,9 @@ export function CommentSection({
         } else {
           setErrorMsg(res.error || "No se pudo publicar el comentario.");
         }
-      } catch (err: any) {
-        setErrorMsg(err.message || "Error al procesar el comentario.");
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : "Error al procesar el comentario.";
+        setErrorMsg(errorMsg);
       }
     });
   };
@@ -155,8 +171,9 @@ export function CommentSection({
       } else {
         setErrorMsg(res.error || "No se pudo publicar la respuesta.");
       }
-    } catch (err: any) {
-      setErrorMsg(err.message || "Error al enviar la respuesta.");
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Error al enviar la respuesta.";
+      setErrorMsg(errorMsg);
     }
   };
 
@@ -171,8 +188,9 @@ export function CommentSection({
       } else {
         setErrorMsg(res.error || "No se pudo editar el comentario.");
       }
-    } catch (err: any) {
-      setErrorMsg(err.message || "Error al actualizar comentario.");
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Error al actualizar comentario.";
+      setErrorMsg(errorMsg);
     }
   };
 
@@ -189,8 +207,9 @@ export function CommentSection({
       } else {
         setErrorMsg(res.error || "No se pudo eliminar el comentario.");
       }
-    } catch (err: any) {
-      setErrorMsg(err.message || "Error al eliminar el comentario.");
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Error al eliminar el comentario.";
+      setErrorMsg(errorMsg);
     }
   };
 
@@ -203,15 +222,16 @@ export function CommentSection({
         setCommentsList((prev) =>
           prev.map((c) =>
             c.id === commentId
-              ? { ...c, status: (hide ? "HIDDEN" : "ACTIVE") as any }
+              ? { ...c, status: (hide ? "HIDDEN" : "ACTIVE") as "HIDDEN" | "ACTIVE" }
               : c
           )
         );
       } else {
         setErrorMsg(res.error || "No se pudo moderar el comentario.");
       }
-    } catch (err: any) {
-      setErrorMsg(err.message || "Error al moderar.");
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Error al moderar.";
+      setErrorMsg(errorMsg);
     }
   };
 
@@ -225,8 +245,9 @@ export function CommentSection({
       } else {
         setErrorMsg(res.error || "No se pudo cambiar la respuesta aceptada.");
       }
-    } catch (err: any) {
-      setErrorMsg(err.message || "Error al aceptar la respuesta.");
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Error al aceptar la respuesta.";
+      setErrorMsg(errorMsg);
     }
   };
 
@@ -278,14 +299,30 @@ export function CommentSection({
                 targetType="COMMENT"
                 value={rootAttachments}
                 onChange={setRootAttachments}
+                onUploadStatusChange={({ isUploading, hasError }) => {
+                  setIsUploading(isUploading);
+                  setHasUploadError(hasError);
+                }}
               />
-              <button
-                onClick={handlePostRootComment}
-                disabled={isPending || !rootCommentText.trim()}
-                className="rounded-full bg-white text-neutral-950 px-5 py-2 text-xs font-semibold hover:bg-neutral-200 disabled:opacity-50 transition-all cursor-pointer self-end shadow-md"
-              >
-                {isPending ? "Publicando..." : "Comentar"}
-              </button>
+              <div className="flex items-center justify-end gap-3 mt-1">
+                {isUploading && (
+                  <span className="text-[11px] text-blue-450 animate-pulse font-light mr-auto">
+                    Subiendo archivos...
+                  </span>
+                )}
+                {hasUploadError && (
+                  <span className="text-[11px] text-red-400 font-medium mr-auto">
+                    Corrige los errores de subida.
+                  </span>
+                )}
+                <button
+                  onClick={handlePostRootComment}
+                  disabled={isPending || isUploading || hasUploadError || !rootCommentText.trim()}
+                  className="rounded-full bg-white text-neutral-950 px-5 py-2 text-xs font-semibold hover:bg-neutral-200 disabled:opacity-50 transition-all cursor-pointer shadow-md"
+                >
+                  {isPending ? "Publicando..." : isUploading ? "Subiendo..." : "Comentar"}
+                </button>
+              </div>
             </div>
           )
         ) : (

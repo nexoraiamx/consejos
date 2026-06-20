@@ -89,7 +89,7 @@ export default function ModerationClient({ initialReports, communitySlug, commun
       } else {
         setError(res.error || "Ocurrió un error al procesar el reporte.");
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
       setError("Error interno al procesar tu solicitud.");
     } finally {

@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { communities, communityMembers, profiles, posts, userReputation, attachments } from "@/db/schema";
-import { eq, and, isNull, sql, desc, inArray } from "drizzle-orm";
+import { communities, communityMembers, profiles, posts, userReputation, attachments, joinRequests } from "@/db/schema";
+import { eq, and, isNull, sql, desc, inArray, or } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { ArrowLeft, Inbox, Globe, Lock, ShieldAlert, Calendar, User, EyeOff, Shield, Plus } from "lucide-react";
 import Link from "next/link";
@@ -46,14 +46,17 @@ export default async function CommunityDetailPage({ params }: Props) {
     notFound();
   }
 
-  // 2. Cantidad de miembros con APPROVED
+  // 2. Cantidad de miembros con APPROVED o approved
   const [countResult] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(communityMembers)
     .where(
       and(
         eq(communityMembers.communityId, community.id),
-        eq(communityMembers.status, "APPROVED")
+        or(
+          eq(communityMembers.status, "APPROVED"),
+          eq(communityMembers.status, "approved")
+        )
       )
     );
 
@@ -62,7 +65,7 @@ export default async function CommunityDetailPage({ params }: Props) {
   // 3. Consultar membresía del usuario actual
   let isJoined = false;
   let membershipStatus: "APPROVED" | "PENDING" | "BANNED" | null = null;
-  let userRole: "COMMUNITY_ADMIN" | "MODERATOR" | "MEMBER" | null = null;
+  let userRole: "owner" | "COMMUNITY_ADMIN" | "MODERATOR" | "MEMBER" | null = null;
 
   if (currentUser) {
     const membership = await db.query.communityMembers.findFirst({
@@ -73,15 +76,27 @@ export default async function CommunityDetailPage({ params }: Props) {
     });
 
     if (membership) {
-      isJoined = membership.status === "APPROVED";
-      membershipStatus = membership.status as "APPROVED" | "PENDING" | "BANNED";
-      userRole = membership.role as "COMMUNITY_ADMIN" | "MODERATOR" | "MEMBER";
+      const statusUpper = membership.status.toUpperCase();
+      isJoined = statusUpper === "APPROVED";
+      membershipStatus = statusUpper as "APPROVED" | "PENDING" | "BANNED";
+      userRole = membership.role as "owner" | "COMMUNITY_ADMIN" | "MODERATOR" | "MEMBER";
+    } else {
+      // Si no es miembro, verificar si tiene una solicitud de ingreso pendiente en joinRequests
+      const joinRequest = await db.query.joinRequests.findFirst({
+        where: and(
+          eq(joinRequests.communityId, community.id),
+          eq(joinRequests.userId, currentUser.id)
+        ),
+      });
+      if (joinRequest) {
+        membershipStatus = "PENDING";
+      }
     }
   }
 
   const isGlobalAdmin = currentUser?.globalRole === "GLOBAL_ADMIN";
   const hasAccess = community.privacyType === "PUBLIC" || isJoined || isGlobalAdmin;
-  const canModerate = isGlobalAdmin || userRole === "COMMUNITY_ADMIN" || userRole === "MODERATOR";
+  const canModerate = isGlobalAdmin || userRole === "owner" || userRole === "COMMUNITY_ADMIN" || userRole === "MODERATOR";
 
   // 4. Nombre del creador
   let creatorName = "Sistema";
@@ -210,14 +225,23 @@ export default async function CommunityDetailPage({ params }: Props) {
             </div>
           </div>
 
-          {/* Join Button */}
+          {/* Join Button o Administrar */}
           {currentUser && (
             <div className="flex items-center gap-2">
-              <JoinButton
-                communityId={community.id}
-                initialIsJoined={isJoined}
-                initialStatus={membershipStatus}
-              />
+              {userRole === "owner" || userRole === "COMMUNITY_ADMIN" ? (
+                <Link
+                  href={`/app/r/${community.slug}/admin`}
+                  className="rounded-full bg-blue-600 border border-blue-500 text-white px-5 py-2 text-xs font-semibold hover:bg-blue-700 transition-all cursor-pointer shadow-md shadow-blue-500/10"
+                >
+                  Administrar Comunidad
+                </Link>
+              ) : (
+                <JoinButton
+                  communityId={community.id}
+                  initialIsJoined={isJoined}
+                  initialStatus={membershipStatus}
+                />
+              )}
             </div>
           )}
         </div>
@@ -301,8 +325,8 @@ export default async function CommunityDetailPage({ params }: Props) {
                       createdAt={timeAgo(post.createdAt)}
                       upvotesCount={0}
                       commentsCount={0}
-                      postType={post.postType as any}
-                      status={post.status as any}
+                      postType={post.postType as "QUESTION" | "RESOURCE" | "DISCUSSION" | "CASE_STUDY"}
+                      status={post.status as "ACTIVE" | "HIDDEN" | "DELETED"}
                       currentUserId={currentUser?.id}
                       canModerate={canModerate}
                       attachments={postAttachments}
@@ -344,7 +368,7 @@ export default async function CommunityDetailPage({ params }: Props) {
             </div>
 
             {/* Panel de Roles del Usuario */}
-            {currentUser && membershipStatus === "APPROVED" && (
+            {currentUser && (membershipStatus === "APPROVED" || userRole === "owner") && (
               <div className="p-6 rounded-3xl border border-neutral-900 bg-neutral-950/40 backdrop-blur-md flex flex-col gap-3">
                 <h3 className="text-xs font-semibold text-neutral-400 tracking-wider uppercase border-b border-neutral-900 pb-3">
                   Tu membresía
@@ -352,10 +376,10 @@ export default async function CommunityDetailPage({ params }: Props) {
                 <div className="flex items-center justify-between text-xs mt-1">
                   <span className="text-neutral-400 font-light">Rol local:</span>
                   <span className="inline-flex items-center gap-1 rounded-full bg-blue-950/40 border border-blue-900/60 px-2.5 py-0.5 text-[10px] font-semibold text-blue-400">
-                    {userRole === "COMMUNITY_ADMIN" ? "Administrador" : userRole === "MODERATOR" ? "Moderador" : "Miembro"}
+                    {userRole === "owner" ? "Propietario" : userRole === "COMMUNITY_ADMIN" ? "Administrador" : userRole === "MODERATOR" ? "Moderador" : "Miembro"}
                   </span>
                 </div>
-                {userRole === "COMMUNITY_ADMIN" && (
+                {(userRole === "owner" || userRole === "COMMUNITY_ADMIN") && (
                   <div className="mt-2 p-3 rounded-2xl bg-blue-950/10 border border-blue-900/20 text-[10px] text-blue-400 font-light flex items-center gap-2">
                     <Shield className="h-4 w-4 flex-shrink-0" />
                     <span>Tienes acceso para administrar este espacio y moderar el contenido.</span>

@@ -104,12 +104,20 @@ const compressImage = (file: File): Promise<File> => {
   });
 };
 
+const generateRecordedMediaFilename = (isAudio: boolean): string => {
+  const timestamp = Date.now();
+  return isAudio 
+    ? `grabacion_audio_${timestamp}.webm` 
+    : `grabacion_video_${timestamp}.webm`;
+};
+
 interface UploaderProps {
   communityId: string;
   targetType: "POST" | "COMMENT";
   targetId?: string;
   onChange: (attachments: AttachmentInput[]) => void;
   value: AttachmentInput[];
+  onUploadStatusChange?: (status: { isUploading: boolean; hasError: boolean }) => void;
 }
 
 interface UploadTask {
@@ -127,7 +135,8 @@ export function Uploader({
   targetType,
   targetId,
   onChange,
-  value
+  value,
+  onUploadStatusChange
 }: UploaderProps) {
   const [activeTab, setActiveTab] = useState<"upload" | "audio" | "video" | "link">("upload");
   const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
@@ -156,19 +165,6 @@ export function Uploader({
   const liveVideoRef = useRef<HTMLVideoElement | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
-
-  useEffect(() => {
-    // Generar upload session id al montar
-    uploadSessionIdRef.current = crypto.randomUUID();
-
-    // Limpieza al desmontar
-    return () => {
-      stopTracks();
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-      }
-    };
-  }, [previewUrl]);
 
   // Auxiliares de grabación
   const stopTracks = () => {
@@ -212,6 +208,27 @@ export function Uploader({
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
+
+  useEffect(() => {
+    // Generar upload session id al montar
+    uploadSessionIdRef.current = crypto.randomUUID();
+
+    // Limpieza al desmontar
+    return () => {
+      stopTracks();
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  useEffect(() => {
+    if (onUploadStatusChange) {
+      const isUploading = uploadTasks.some((t) => t.status === "uploading" || t.status === "idle");
+      const hasError = uploadTasks.some((t) => t.status === "error");
+      onUploadStatusChange({ isUploading, hasError });
+    }
+  }, [uploadTasks, onUploadStatusChange]);
 
   // API de Grabación de Audio
   const startAudioRecording = async () => {
@@ -264,7 +281,7 @@ export function Uploader({
         });
       }, 1000);
 
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error al acceder al micrófono:", err);
       setRecordingError("Permiso denegado o no se encontró un micrófono.");
     }
@@ -332,7 +349,7 @@ export function Uploader({
         });
       }, 1000);
 
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error al acceder a la cámara/micrófono:", err);
       setRecordingError("Permiso denegado o no se encontró una cámara o micrófono.");
       setRecordingState("idle");
@@ -344,9 +361,7 @@ export function Uploader({
     if (!recordedBlob) return;
 
     const isAudio = activeTab === "audio";
-    const name = isAudio 
-      ? `grabacion_audio_${Date.now()}.webm` 
-      : `grabacion_video_${Date.now()}.webm`;
+    const name = generateRecordedMediaFilename(isAudio);
     
     const mimeType = recordedBlob.type || (isAudio ? "audio/webm" : "video/webm");
     const file = new File([recordedBlob], name, { type: mimeType });
@@ -594,11 +609,12 @@ export function Uploader({
 
       xhr.send(file);
 
-    } catch (err: any) {
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Fallo al subir.";
       console.error(`[UPLOADER] Excepción atrapada en uploadFileToServer para ${file.name}:`, err);
       setUploadTasks((prev) =>
         prev.map((t) =>
-          t.id === taskId ? { ...t, status: "error", error: err.message || "Fallo al subir." } : t
+          t.id === taskId ? { ...t, status: "error", error: errorMsg } : t
         )
       );
     }

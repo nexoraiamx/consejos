@@ -15,6 +15,13 @@
       "when": 1781889242426,
       "tag": "0001_glorious_viper",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781922714364,
+      "tag": "0002_rich_human_robot",
+      "breakpoints": true
     }
   ]
 }

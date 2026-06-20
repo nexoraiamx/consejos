@@ -54,7 +54,7 @@ export function ReportModal({ isOpen, onClose, targetType, targetId }: ReportMod
       } else {
         setError(res.error || "No se pudo enviar el reporte.");
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
       setError("Ocurrió un error inesperado al enviar el reporte.");
     } finally {

@@ -62,7 +62,7 @@ export async function createPostAction(formData: PostInput) {
       ),
     });
 
-    if (!membership || membership.status !== "APPROVED") {
+    if (!membership || membership.status.toUpperCase() !== "APPROVED") {
       return {
         success: false,
         error: "No tienes permiso para publicar en esta comunidad. Debes ser un miembro aprobado."
@@ -299,8 +299,8 @@ export async function hidePostAction(postId: string) {
 
     if (
       membership && 
-      (membership.role === "COMMUNITY_ADMIN" || membership.role === "MODERATOR") && 
-      membership.status === "APPROVED"
+      (membership.role.toLowerCase() === "owner" || membership.role === "COMMUNITY_ADMIN" || membership.role === "MODERATOR") && 
+      membership.status.toUpperCase() === "APPROVED"
     ) {
       isAllowed = true;
     }
@@ -387,8 +387,8 @@ export async function unhidePostAction(postId: string) {
 
     if (
       membership && 
-      (membership.role === "COMMUNITY_ADMIN" || membership.role === "MODERATOR") && 
-      membership.status === "APPROVED"
+      (membership.role.toLowerCase() === "owner" || membership.role === "COMMUNITY_ADMIN" || membership.role === "MODERATOR") && 
+      membership.status.toUpperCase() === "APPROVED"
     ) {
       isAllowed = true;
     }

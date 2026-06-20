@@ -69,16 +69,21 @@ Para evitar bloqueos por políticas de origen cruzado (CORS) cuando el navegador
 ```json
 [
   {
+    "AllowedOrigins": [
+      "https://consejos-app.vercel.app",
+      "https://*.vercel.app",
+      "http://localhost:3000"
+    ],
+    "AllowedMethods": ["GET", "PUT", "POST", "HEAD", "OPTIONS"],
     "AllowedHeaders": ["*"],
-    "AllowedMethods": ["PUT", "GET", "HEAD", "OPTIONS"],
-    "AllowedOrigins": ["*"],
-    "ExposeHeaders": []
+    "ExposeHeaders": ["ETag", "Content-Length"],
+    "MaxAgeSeconds": 86400
   }
 ]
 ```
 
 > [!TIP]
-> Al configurar `"AllowedOrigins": ["*"]` se evitan problemas de CORS con las URLs autogeneradas por Vercel para ramas de vista previa (Preview deployments). En producción real y por seguridad, una vez estabilizado, puedes restringir la lista a tu dominio principal de producción (ej: `https://tu-dominio.com`) y `http://localhost:3000`.
+> Esta configuración CORS permite la subida directa desde el dominio de producción, todos los dominios de vista previa generados por Vercel (`https://*.vercel.app`) y el entorno de desarrollo local (`http://localhost:3000`), manteniendo expuestas las cabeceras `ETag` y `Content-Length`.
 
 ---
 

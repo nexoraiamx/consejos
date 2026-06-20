@@ -11,6 +11,7 @@ export const s3Client = new S3Client({
     accessKeyId,
     secretAccessKey,
   },
+  forcePathStyle: true,
 });
 
 // File size limits in bytes

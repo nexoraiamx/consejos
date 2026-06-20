@@ -1,4 +1,4 @@
-import { pgTable, varchar, timestamp, text, boolean, uuid, integer, jsonb, unique, index } from "drizzle-orm/pg-core";
+import { pgTable, varchar, timestamp, text, boolean, uuid, integer, jsonb, unique, index, PgColumn } from "drizzle-orm/pg-core";
 
 // 1. USERS TABLE (Syncs with Clerk Auth)
 export const users = pgTable(
@@ -107,7 +107,7 @@ export const posts = pgTable(
     category: varchar("category", { length: 100 }),
     tags: jsonb("tags").$type<string[]>().default([]).notNull(),
     status: varchar("status", { length: 50 }).default("ACTIVE").notNull(), // 'ACTIVE', 'HIDDEN', 'DELETED'
-    acceptedAnswerId: uuid("accepted_answer_id").references((): any => comments.id, { onDelete: "set null" }), // Accepted Answer Support
+    acceptedAnswerId: uuid("accepted_answer_id").references((): PgColumn => comments.id, { onDelete: "set null" }), // Accepted Answer Support
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
     deletedAt: timestamp("deleted_at"),
@@ -128,7 +128,7 @@ export const comments = pgTable(
     postId: uuid("post_id")
       .references(() => posts.id, { onDelete: "cascade" })
       .notNull(),
-    parentId: uuid("parent_id").references((): any => comments.id, { onDelete: "cascade" }), // Self-reference for replies
+    parentId: uuid("parent_id").references((): PgColumn => comments.id, { onDelete: "cascade" }), // Self-reference for replies
     authorId: varchar("author_id", { length: 256 })
       .references(() => users.id, { onDelete: "set null" })
       .notNull(),
@@ -312,3 +312,50 @@ export const bookmarks = pgTable(
     bookmarkTargetIdx: index("bookmark_target_idx").on(table.targetType, table.targetId),
   })
 );
+
+// 15. INVITATIONS TABLE
+export const invitations = pgTable(
+  "invitations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    communityId: uuid("community_id")
+      .references(() => communities.id, { onDelete: "cascade" })
+      .notNull(),
+    code: varchar("code", { length: 100 }).unique().notNull(),
+    creatorId: varchar("creator_id", { length: 256 })
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    usesCount: integer("uses_count").default(0).notNull(),
+    maxUses: integer("max_uses"),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    inviteCodeIdx: index("invite_code_idx").on(table.code),
+    inviteCommunityIdx: index("invite_community_idx").on(table.communityId),
+  })
+);
+
+// 16. JOIN REQUESTS TABLE
+export const joinRequests = pgTable(
+  "join_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    communityId: uuid("community_id")
+      .references(() => communities.id, { onDelete: "cascade" })
+      .notNull(),
+    userId: varchar("user_id", { length: 256 })
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    status: varchar("status", { length: 50 }).default("PENDING").notNull(), // 'PENDING', 'APPROVED', 'REJECTED'
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    joinReqUnique: unique("join_req_user_community_unique").on(table.communityId, table.userId),
+    joinReqCommunityIdx: index("join_req_community_idx").on(table.communityId),
+    joinReqUserIdx: index("join_req_user_idx").on(table.userId),
+  })
+);
+

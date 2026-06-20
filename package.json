@@ -17,7 +17,8 @@
     "test:moderation": "npx tsx --env-file=.env.local scripts/test-moderation-flow.ts",
     "test:notifications": "npx tsx --env-file=.env.local scripts/test-notifications-flow.ts",
     "test:attachments": "npx tsx --env-file=.env.local scripts/test-attachments-flow.ts",
-    "db:seed": "npx tsx --env-file=.env.local scripts/seed-demo-users.ts"
+    "db:seed": "npx tsx --env-file=.env.local scripts/seed-demo-users.ts",
+    "db:orphans": "npx tsx --env-file=.env.local scripts/detect-orphan-attachments.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1073.0",

@@ -77,7 +77,7 @@ export default async function EditPostPage({ params }: Props) {
       communitySlug={community.slug}
       initialTitle={post.title}
       initialContent={post.content}
-      initialPostType={post.postType as any}
+      initialPostType={post.postType as "DISCUSSION" | "QUESTION" | "RESOURCE" | "CASE_STUDY"}
       initialCategory={post.category || ""}
       initialTags={post.tags}
     />

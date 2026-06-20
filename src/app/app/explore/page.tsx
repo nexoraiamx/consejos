@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { communities, communityMembers } from "@/db/schema";
-import { eq, and, isNull, sql } from "drizzle-orm";
+import { communities, communityMembers, joinRequests } from "@/db/schema";
+import { eq, and, isNull, sql, or } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import ExploreClient from "./explore-client";
 
@@ -9,7 +9,14 @@ export const dynamic = "force-dynamic";
 
 export default async function ExplorePage() {
   const user = await getCurrentUser();
-  let dbCommunities: any[] = [];
+  let dbCommunities: {
+    id: string;
+    slug: string;
+    displayName: string;
+    description: string | null;
+    privacyType: string;
+    createdAt: Date;
+  }[] = [];
 
   try {
     dbCommunities = await db
@@ -39,7 +46,10 @@ export default async function ExplorePage() {
           .where(
             and(
               eq(communityMembers.communityId, comm.id),
-              eq(communityMembers.status, "APPROVED")
+              or(
+                eq(communityMembers.status, "APPROVED"),
+                eq(communityMembers.status, "approved")
+              )
             )
           );
         membersCount = countResult?.count || 0;
@@ -61,8 +71,19 @@ export default async function ExplorePage() {
           });
 
           if (membership) {
-            isJoined = membership.status === "APPROVED";
-            membershipStatus = membership.status as "APPROVED" | "PENDING" | "BANNED";
+            const statusUpper = membership.status.toUpperCase();
+            isJoined = statusUpper === "APPROVED";
+            membershipStatus = statusUpper as "APPROVED" | "PENDING" | "BANNED";
+          } else {
+            const joinRequest = await db.query.joinRequests.findFirst({
+              where: and(
+                eq(joinRequests.communityId, comm.id),
+                eq(joinRequests.userId, user.id)
+              ),
+            });
+            if (joinRequest) {
+              membershipStatus = "PENDING";
+            }
           }
         } catch (err) {
           console.error(`Error al consultar membresía para el usuario ${user.id} en la comunidad ${comm.id}:`, err);

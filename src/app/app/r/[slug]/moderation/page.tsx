@@ -44,8 +44,8 @@ export default async function CommunityModerationPage({ params }: Props) {
 
     if (
       membership &&
-      (membership.role === "COMMUNITY_ADMIN" || membership.role === "MODERATOR") &&
-      membership.status === "APPROVED"
+      (membership.role.toLowerCase() === "owner" || membership.role === "COMMUNITY_ADMIN" || membership.role === "MODERATOR") &&
+      membership.status.toUpperCase() === "APPROVED"
     ) {
       canModerate = true;
     }
@@ -133,13 +133,13 @@ export default async function CommunityModerationPage({ params }: Props) {
       targetId: pr.targetId,
       reason: pr.reason,
       description: pr.description,
-      status: pr.status as any,
+      status: pr.status as "PENDING" | "RESOLVED" | "DISMISSED",
       resolutionNotes: pr.resolutionNotes,
       createdAt: pr.createdAt,
       reporterId: pr.reporterId,
       contentPreview: pr.postTitle,
       contentAuthorId: pr.postAuthorId,
-      contentStatus: pr.postStatus as any,
+      contentStatus: pr.postStatus as "ACTIVE" | "HIDDEN" | "DELETED",
     })),
     ...commentReportsResult.map((cr) => ({
       id: cr.id,
@@ -147,13 +147,13 @@ export default async function CommunityModerationPage({ params }: Props) {
       targetId: cr.targetId,
       reason: cr.reason,
       description: cr.description,
-      status: cr.status as any,
+      status: cr.status as "PENDING" | "RESOLVED" | "DISMISSED",
       resolutionNotes: cr.resolutionNotes,
       createdAt: cr.createdAt,
       reporterId: cr.reporterId,
       contentPreview: cr.commentContent,
       contentAuthorId: cr.commentAuthorId,
-      contentStatus: cr.commentStatus as any,
+      contentStatus: cr.commentStatus as "ACTIVE" | "HIDDEN" | "DELETED",
     })),
   ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 

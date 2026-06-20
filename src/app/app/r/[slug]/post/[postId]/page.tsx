@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { posts, communities, communityMembers, profiles, userReputation, comments, attachments } from "@/db/schema";
+import { posts, communities, communityMembers, profiles, userReputation, comments, attachments, joinRequests } from "@/db/schema";
 import { eq, and, isNull, inArray } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { CommentSection } from "@/components/shared/comment-section";
@@ -105,8 +105,19 @@ export default async function PostDetailPage({ params }: Props) {
       ),
     });
     if (membership) {
-      isJoined = membership.status === "APPROVED";
-      membershipStatus = membership.status;
+      const statusUpper = membership.status.toUpperCase();
+      isJoined = statusUpper === "APPROVED";
+      membershipStatus = statusUpper;
+    } else {
+      const joinRequest = await db.query.joinRequests.findFirst({
+        where: and(
+          eq(joinRequests.communityId, community.id),
+          eq(joinRequests.userId, currentUser.id)
+        ),
+      });
+      if (joinRequest) {
+        membershipStatus = "PENDING";
+      }
     }
   }
 
@@ -194,8 +205,8 @@ export default async function PostDetailPage({ params }: Props) {
     });
     if (
       membership &&
-      (membership.role === "COMMUNITY_ADMIN" || membership.role === "MODERATOR") &&
-      membership.status === "APPROVED"
+      (membership.role.toLowerCase() === "owner" || membership.role === "COMMUNITY_ADMIN" || membership.role === "MODERATOR") &&
+      membership.status.toUpperCase() === "APPROVED"
     ) {
       canModerate = true;
     }

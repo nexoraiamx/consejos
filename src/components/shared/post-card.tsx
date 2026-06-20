@@ -122,7 +122,7 @@ export function PostCard({
       const action = status === "HIDDEN" ? unhidePostAction : hidePostAction;
       const res = await action(id);
       if (res.success) {
-        setStatus(res.status as any);
+        setStatus(res.status as "ACTIVE" | "HIDDEN" | "DELETED");
       } else {
         alert(res.error || "No se pudo cambiar el estado de moderación.");
       }

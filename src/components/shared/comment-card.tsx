@@ -35,7 +35,7 @@ export interface CommentCardProps {
   canModerate?: boolean;
   isPostAuthor?: boolean;
   isAccepted?: boolean;
-  attachments?: any[];
+  attachments?: AttachmentInput[];
   communityId: string;
   replies?: CommentCardProps[];
   onAcceptAnswer?: (commentId: string) => Promise<void>;
@@ -72,6 +72,8 @@ export function CommentCard({
   const [showReplyForm, setShowReplyForm] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [replyAttachments, setReplyAttachments] = useState<AttachmentInput[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [hasUploadError, setHasUploadError] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(content);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -81,7 +83,7 @@ export function CommentCard({
   const isHidden = status === "HIDDEN";
 
   const handleReplySubmit = async () => {
-    if (!replyText.trim() || !onReplyComment) return;
+    if (!replyText.trim() || !onReplyComment || isUploading || hasUploadError) return;
     setIsSubmitting(true);
     try {
       await onReplyComment(id, replyText, replyAttachments);
@@ -338,15 +340,29 @@ export function CommentCard({
                 targetType="COMMENT"
                 value={replyAttachments}
                 onChange={setReplyAttachments}
+                onUploadStatusChange={({ isUploading, hasError }) => {
+                  setIsUploading(isUploading);
+                  setHasUploadError(hasError);
+                }}
               />
             </div>
-            <div className="flex gap-1.5 mt-1">
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              {isUploading && (
+                <span className="text-[10px] text-blue-450 animate-pulse font-light mr-auto">
+                  Subiendo archivos...
+                </span>
+              )}
+              {hasUploadError && (
+                <span className="text-[10px] text-red-400 font-medium mr-auto">
+                  Corrige los errores de subida.
+                </span>
+              )}
               <button
                 onClick={handleReplySubmit}
-                disabled={isSubmitting || !replyText.trim()}
+                disabled={isSubmitting || isUploading || hasUploadError || !replyText.trim()}
                 className="rounded-full bg-white text-neutral-950 px-3.5 py-1 text-[10px] font-semibold hover:bg-neutral-200 disabled:opacity-50 transition-colors cursor-pointer"
               >
-                {isSubmitting ? "Enviando..." : "Enviar"}
+                {isSubmitting ? "Enviando..." : isUploading ? "Subiendo..." : "Enviar"}
               </button>
               <button
                 onClick={() => setShowReplyForm(false)}

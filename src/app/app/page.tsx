@@ -1,7 +1,7 @@
 import React from "react";
 import { db } from "@/db";
-import { posts, communities, communityMembers, profiles, userReputation, attachments, comments } from "@/db/schema";
-import { eq, and, isNull, sql, desc, inArray } from "drizzle-orm";
+import { posts, communities, communityMembers, profiles, userReputation, attachments, comments, joinRequests } from "@/db/schema";
+import { eq, and, isNull, sql, desc, inArray, or } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { PostCard } from "@/components/shared/post-card";
 import { CommunityCard } from "@/components/shared/community-card";
@@ -29,7 +29,23 @@ export default async function AppDashboard() {
   const currentUser = await getCurrentUser();
 
   // 1. Consultar posts reales de Neon con leftJoins robustos
-  let dbPosts: any[] = [];
+  let dbPosts: {
+    id: string;
+    title: string;
+    content: string;
+    postType: string;
+    category: string | null;
+    tags: string[];
+    status: string;
+    createdAt: Date;
+    authorId: string;
+    authorName: string | null;
+    authorAvatar: string | null;
+    authorReputation: number | null;
+    communitySlug: string;
+    communityName: string;
+    commentsCount: number;
+  }[] = [];
   try {
     dbPosts = await db
       .select({
@@ -68,7 +84,7 @@ export default async function AppDashboard() {
 
   // 2. Obtener adjuntos para los posts
   const postIds = dbPosts.map((p) => p.id);
-  let feedAttachments: any[] = [];
+  let feedAttachments: (typeof attachments.$inferSelect)[] = [];
   if (postIds.length > 0) {
     try {
       feedAttachments = await db
@@ -86,7 +102,13 @@ export default async function AppDashboard() {
   }
 
   // 3. Consultar comunidades destacadas (hasta 5)
-  let dbCommunities: any[] = [];
+  let dbCommunities: {
+    id: string;
+    slug: string;
+    displayName: string;
+    description: string | null;
+    privacyType: string;
+  }[] = [];
   try {
     dbCommunities = await db
       .select({
@@ -113,7 +135,10 @@ export default async function AppDashboard() {
           .where(
             and(
               eq(communityMembers.communityId, comm.id),
-              eq(communityMembers.status, "APPROVED")
+              or(
+                eq(communityMembers.status, "APPROVED"),
+                eq(communityMembers.status, "approved")
+              )
             )
           );
         membersCount = countResult?.count || 0;
@@ -132,8 +157,19 @@ export default async function AppDashboard() {
             ),
           });
           if (membership) {
-            isJoined = membership.status === "APPROVED";
-            membershipStatus = membership.status as "APPROVED" | "PENDING" | "BANNED";
+            const statusUpper = membership.status.toUpperCase();
+            isJoined = statusUpper === "APPROVED";
+            membershipStatus = statusUpper as "APPROVED" | "PENDING" | "BANNED";
+          } else {
+            const joinRequest = await db.query.joinRequests.findFirst({
+              where: and(
+                eq(joinRequests.communityId, comm.id),
+                eq(joinRequests.userId, currentUser.id)
+              ),
+            });
+            if (joinRequest) {
+              membershipStatus = "PENDING";
+            }
           }
         } catch (err) {
           console.error(`Error al consultar membresía para ${comm.id}:`, err);
@@ -232,8 +268,8 @@ export default async function AppDashboard() {
                     createdAt={timeAgo(post.createdAt)}
                     upvotesCount={0}
                     commentsCount={post.commentsCount || 0}
-                    postType={post.postType as any}
-                    status={post.status as any}
+                    postType={post.postType as "QUESTION" | "RESOURCE" | "DISCUSSION" | "CASE_STUDY"}
+                    status={post.status as "ACTIVE" | "HIDDEN" | "DELETED"}
                     currentUserId={currentUser?.id}
                     attachments={postAttachments}
                   />

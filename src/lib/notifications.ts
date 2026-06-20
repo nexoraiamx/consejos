@@ -16,7 +16,7 @@ interface CreateNotificationInput {
  * Si el destinatario es el mismo remitente, la operación se ignora para evitar notificaciones propias.
  */
 export async function createNotificationTx(
-  tx: any,
+  tx: Parameters<Parameters<typeof poolDb.transaction>[0]>[0],
   data: CreateNotificationInput
 ) {
   // Evitar notificaciones al mismo usuario que causó la acción

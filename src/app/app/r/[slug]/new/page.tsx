@@ -42,7 +42,7 @@ export default async function NewPostPage({ params }: Props) {
       ),
     });
 
-    if (!membership || membership.status !== "APPROVED") {
+    if (!membership || membership.status.toUpperCase() !== "APPROVED") {
       return (
         <div className="flex-1 w-full max-w-md mx-auto px-6 py-20 flex flex-col items-center justify-center text-center gap-4">
           <div className="h-12 w-12 rounded-2xl bg-red-950/20 border border-red-900/40 flex items-center justify-center text-red-400 font-bold">
