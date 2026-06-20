@@ -146,6 +146,7 @@ export function Uploader({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadSessionIdRef = useRef<string>("");
+  const filesRef = useRef<Map<string, File>>(new Map());
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -355,6 +356,7 @@ export function Uploader({
 
     // Iniciar subida
     const taskId = crypto.randomUUID();
+    filesRef.current.set(taskId, file);
     const newTask: UploadTask = {
       id: taskId,
       fileName: file.name,
@@ -487,6 +489,7 @@ export function Uploader({
       }
 
       const taskId = crypto.randomUUID();
+      filesRef.current.set(taskId, fileToUpload);
       const newTask: UploadTask = {
         id: taskId,
         fileName: fileToUpload.name,
@@ -502,12 +505,14 @@ export function Uploader({
   };
 
   const uploadFileToServer = async (file: File, taskId: string) => {
+    console.log(`[UPLOADER] Iniciando subida para taskId: ${taskId}, archivo: ${file.name}, tamaño: ${file.size} bytes`);
     setUploadTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, status: "uploading" } : t))
+      prev.map((t) => (t.id === taskId ? { ...t, status: "uploading", progress: 0 } : t))
     );
 
     try {
       // 1. Obtener Presigned URL
+      console.log(`[UPLOADER] Solicitando presigned URL para ${file.name}...`);
       const presignRes = await fetch("/api/uploads/presign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -524,10 +529,12 @@ export function Uploader({
 
       if (!presignRes.ok) {
         const errData = await presignRes.json();
+        console.error(`[UPLOADER] Error en endpoint presign:`, errData);
         throw new Error(errData.error || "Error al firmar la subida.");
       }
 
       const { uploadUrl, fileUrl, fileKey } = await presignRes.json();
+      console.log(`[UPLOADER] Presigned URL creada con éxito para ${file.name}.`);
 
       // 2. Subida física
       const xhr = new XMLHttpRequest();
@@ -537,6 +544,7 @@ export function Uploader({
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
           const percentComplete = Math.round((e.loaded / e.total) * 100);
+          console.log(`[UPLOADER] Progreso de subida para ${file.name}: ${percentComplete}%`);
           setUploadTasks((prev) =>
             prev.map((t) => (t.id === taskId ? { ...t, progress: percentComplete } : t))
           );
@@ -545,9 +553,13 @@ export function Uploader({
 
       xhr.onload = () => {
         if (xhr.status === 200) {
+          console.log(`[UPLOADER] Subida terminada con éxito en R2 para ${file.name}.`);
           setUploadTasks((prev) =>
             prev.map((t) => (t.id === taskId ? { ...t, status: "success", progress: 100 } : t))
           );
+
+          // Eliminar del mapa de archivos temporales
+          filesRef.current.delete(taskId);
 
           // Agregar al array de adjuntos
           const newAttachment: AttachmentInput = {
@@ -558,19 +570,32 @@ export function Uploader({
             mimeType: file.type,
           };
           onChange([...value, newAttachment]);
+          console.log(`[UPLOADER] Adjunto agregado localmente a la lista:`, newAttachment);
         } else {
-          throw new Error(`Error de red con código de estado: ${xhr.status}`);
+          const errorMsg = `Error de red con código de estado: ${xhr.status}`;
+          console.error(`[UPLOADER] ${errorMsg} al subir ${file.name}`);
+          setUploadTasks((prev) =>
+            prev.map((t) =>
+              t.id === taskId ? { ...t, status: "error", error: errorMsg } : t
+            )
+          );
         }
       };
 
       xhr.onerror = () => {
-        throw new Error("Fallo en la conexión de red.");
+        const errorMsg = "Fallo de conexión o CORS bloqueado al conectar con R2.";
+        console.error(`[UPLOADER] ${errorMsg} para ${file.name}`);
+        setUploadTasks((prev) =>
+          prev.map((t) =>
+            t.id === taskId ? { ...t, status: "error", error: errorMsg } : t
+          )
+        );
       };
 
       xhr.send(file);
 
     } catch (err: any) {
-      console.error(err);
+      console.error(`[UPLOADER] Excepción atrapada en uploadFileToServer para ${file.name}:`, err);
       setUploadTasks((prev) =>
         prev.map((t) =>
           t.id === taskId ? { ...t, status: "error", error: err.message || "Fallo al subir." } : t
@@ -1008,16 +1033,40 @@ export function Uploader({
                     )}
                   </div>
                 </div>
-                {task.status === "uploading" ? (
-                  <Loader2 className="h-4 w-4 text-blue-500 animate-spin shrink-0" />
-                ) : (
-                  <button 
-                    onClick={() => setUploadTasks(prev => prev.filter(t => t.id !== task.id))}
-                    className="p-1 rounded-lg hover:bg-neutral-900 text-neutral-500 hover:text-neutral-250 cursor-pointer shrink-0"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
+                <div className="flex items-center gap-1 shrink-0">
+                  {task.status === "uploading" ? (
+                    <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
+                  ) : (
+                    <>
+                      {task.status === "error" && (
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            const file = filesRef.current.get(task.id);
+                            if (file) {
+                              uploadFileToServer(file, task.id);
+                            }
+                          }}
+                          className="p-1 rounded-lg hover:bg-neutral-900 text-blue-450 hover:text-blue-350 cursor-pointer transition-colors"
+                          title="Reintentar"
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                        </button>
+                      )}
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          filesRef.current.delete(task.id);
+                          setUploadTasks(prev => prev.filter(t => t.id !== task.id));
+                        }}
+                        className="p-1 rounded-lg hover:bg-neutral-900 text-neutral-500 hover:text-red-400 cursor-pointer transition-colors"
+                        title="Eliminar"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             ))}
         </div>

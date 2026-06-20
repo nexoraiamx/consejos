@@ -60,7 +60,7 @@ Por defecto, los buckets de Cloudflare R2 son totalmente privados. Debes habilit
 
 ## 5. Configuración de Políticas de CORS en Cloudflare R2
 
-Para evitar bloqueos por políticas de origen cruzado (CORS) cuando el navegador del usuario intente subir archivos directamente al bucket mediante llamadas HTTP `PUT` directas, debes agregar la siguiente configuración CORS en Cloudflare:
+Para evitar bloqueos por políticas de origen cruzado (CORS) cuando el navegador del usuario intente subir archivos directamente al bucket mediante llamadas HTTP `PUT` directas, debes agregar la siguiente configuración CORS en Cloudflare (es crucial incluir la solicitud de preflight `OPTIONS` y habilitar los dominios correspondientes):
 
 1. Entra a la configuración del bucket en Cloudflare.
 2. Ve a la pestaña **Settings** y busca la sección **CORS Policy**.
@@ -70,17 +70,15 @@ Para evitar bloqueos por políticas de origen cruzado (CORS) cuando el navegador
 [
   {
     "AllowedHeaders": ["*"],
-    "AllowedMethods": ["PUT", "GET", "HEAD"],
-    "AllowedOrigins": [
-      "http://localhost:3000",
-      "https://consejos-app.vercel.app",
-      "https://consejos-2czfhmxos-juangm1905-1609s-projects.vercel.app",
-      "https://consejos-192ffwm4p-juangm1905-1609s-projects.vercel.app"
-    ],
+    "AllowedMethods": ["PUT", "GET", "HEAD", "OPTIONS"],
+    "AllowedOrigins": ["*"],
     "ExposeHeaders": []
   }
 ]
 ```
+
+> [!TIP]
+> Al configurar `"AllowedOrigins": ["*"]` se evitan problemas de CORS con las URLs autogeneradas por Vercel para ramas de vista previa (Preview deployments). En producción real y por seguridad, una vez estabilizado, puedes restringir la lista a tu dominio principal de producción (ej: `https://tu-dominio.com`) y `http://localhost:3000`.
 
 ---
 
