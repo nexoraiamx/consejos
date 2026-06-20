@@ -23,7 +23,8 @@ import {
   expelMemberAction, 
   createInvitationAction, 
   deactivateInvitationAction,
-  updateCommunitySettingsAction
+  updateCommunitySettingsAction,
+  deleteCommunityAction
 } from "@/app/actions/communities";
 import { useRouter } from "next/navigation";
 import { ImageUploader } from "@/components/shared/image-uploader";
@@ -70,11 +71,13 @@ interface AdminClientProps {
     avatarUrl?: string | null;
     bannerUrl?: string | null;
     category?: string | null;
+    creatorId?: string | null;
   };
   initialMembers: Member[];
   initialRequests: Request[];
   initialInvitations: Invitation[];
   currentUserId: string;
+  isGlobalAdmin: boolean;
 }
 
 type TabType = "requests" | "members" | "invitations" | "settings";
@@ -84,7 +87,8 @@ export default function AdminClient({
   initialMembers,
   initialRequests,
   initialInvitations,
-  currentUserId
+  currentUserId,
+  isGlobalAdmin
 }: AdminClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>("requests");
@@ -106,6 +110,32 @@ export default function AdminClient({
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+
+  // Delete Community State
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isDeletingCommunity, setIsDeletingCommunity] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDeleteCommunity = async () => {
+    if (deleteConfirmText !== "ELIMINAR") return;
+    setIsDeletingCommunity(true);
+    setDeleteError(null);
+
+    try {
+      const res = await deleteCommunityAction(community.id);
+      if (res.success) {
+        router.push("/app/explore");
+      } else {
+        setDeleteError(res.error || "No se pudo eliminar la comunidad.");
+        setIsDeletingCommunity(false);
+      }
+    } catch (err) {
+      console.error(err);
+      setDeleteError("Error de red al intentar eliminar la comunidad.");
+      setIsDeletingCommunity(false);
+    }
+  };
 
   // Helper to handle clipboard copy
   const copyToClipboard = (code: string) => {
@@ -752,6 +782,72 @@ export default function AdminClient({
               )}
             </button>
           </form>
+        )}
+
+        {activeTab === "settings" && (isGlobalAdmin || community.creatorId === currentUserId || members.some(m => m.userId === currentUserId && m.role === "COMMUNITY_ADMIN" && m.status === "APPROVED")) && (
+          <div className="mt-12 p-6 rounded-3xl border border-red-900/35 bg-red-955/5 flex flex-col gap-4 text-left">
+            <div className="flex items-start gap-3">
+              <ShieldAlert className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+              <div className="flex flex-col gap-1">
+                <h3 className="text-sm font-semibold text-red-400 font-heading">Zona de Peligro: Eliminar Comunidad</h3>
+                <p className="text-xs text-neutral-400 font-light leading-relaxed">
+                  La comunidad se ocultará permanentemente y sus publicaciones dejarán de aparecer en el feed de la aplicación. Esta acción no se puede deshacer.
+                </p>
+              </div>
+            </div>
+
+            {!showDeleteConfirm ? (
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(true)}
+                className="rounded-full bg-neutral-950 border border-red-900/40 hover:bg-red-950/20 hover:text-red-455 text-neutral-400 px-5 py-2.5 text-xs font-semibold transition-all w-fit cursor-pointer"
+              >
+                Eliminar comunidad
+              </button>
+            ) : (
+              <div className="flex flex-col gap-3 max-w-md mt-2">
+                <label className="text-[11px] font-semibold text-neutral-300">
+                  Escribe <span className="font-mono text-red-450">ELIMINAR</span> para confirmar:
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                    placeholder="Escribe ELIMINAR aquí"
+                    className="flex-1 rounded-2xl bg-neutral-950 border border-neutral-900 px-4 py-2 text-xs font-medium text-white placeholder-neutral-700 focus:outline-none focus:border-red-900/50 transition-all"
+                  />
+                  <button
+                    type="button"
+                    disabled={deleteConfirmText !== "ELIMINAR" || isDeletingCommunity}
+                    onClick={handleDeleteCommunity}
+                    className="rounded-full bg-red-600 hover:bg-red-700 text-white px-4 py-2 text-xs font-semibold disabled:opacity-40 transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    {isDeletingCommunity ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <span>Confirmar</span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isDeletingCommunity}
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      setDeleteConfirmText("");
+                      setDeleteError(null);
+                    }}
+                    className="rounded-full bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-neutral-400 hover:text-neutral-200 px-4 py-2 text-xs font-semibold transition-all cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+                {deleteError && (
+                  <span className="text-[11px] text-red-400 font-medium">{deleteError}</span>
+                )}
+              </div>
+            )}
+          </div>
         )}
         
       </div>

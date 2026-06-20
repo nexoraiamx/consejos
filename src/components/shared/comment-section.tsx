@@ -96,7 +96,7 @@ export function CommentSection({
   const commentTree = buildCommentTree(commentsList || []);
 
   const handlePostRootComment = async () => {
-    if (!rootCommentText.trim()) return;
+    if (!rootCommentText.trim() && rootAttachments.length === 0) return;
     if (isUploading) {
       setErrorMsg("Espera a que terminen de subirse los archivos.");
       return;
@@ -291,7 +291,7 @@ export function CommentSection({
               <textarea
                 value={rootCommentText}
                 onChange={(e) => setRootCommentText(e.target.value)}
-                placeholder="Comparte tu opinión experta o aporta al debate..."
+                placeholder="Escribe algo o adjunta audio, imagen, video, PDF o enlace…"
                 className="w-full min-h-[90px] p-4 text-xs sm:text-sm bg-neutral-955 border border-neutral-900 rounded-2xl text-white placeholder-neutral-550 focus:outline-none focus:border-neutral-800 focus:ring-0 resize-none font-light leading-relaxed transition-colors duration-300"
               />
               <Uploader
@@ -317,7 +317,7 @@ export function CommentSection({
                 )}
                 <button
                   onClick={handlePostRootComment}
-                  disabled={isPending || isUploading || hasUploadError || !rootCommentText.trim()}
+                  disabled={isPending || isUploading || hasUploadError || (!rootCommentText.trim() && rootAttachments.length === 0)}
                   className="rounded-full bg-white text-neutral-950 px-5 py-2 text-xs font-semibold hover:bg-neutral-200 disabled:opacity-50 transition-all cursor-pointer shadow-md"
                 >
                   {isPending ? "Publicando..." : isUploading ? "Subiendo..." : "Comentar"}

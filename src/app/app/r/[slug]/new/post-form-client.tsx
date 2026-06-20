@@ -35,6 +35,16 @@ export default function PostFormClient({
     e.preventDefault();
     if (isLoading) return;
 
+    if (!title.trim() || title.trim().length < 5) {
+      setErrorMessage("El título de la publicación debe tener al menos 5 caracteres.");
+      return;
+    }
+
+    if (!content.trim() && attachments.length === 0) {
+      setErrorMessage("Escribe contenido o agrega un archivo/enlace.");
+      return;
+    }
+
     if (isUploading) {
       setErrorMessage("Por favor espera a que terminen de subirse todos los archivos.");
       return;
@@ -231,8 +241,7 @@ export default function PostFormClient({
         <div className="flex flex-col gap-2">
           <label className="text-xs font-semibold text-neutral-300">Contenido</label>
           <textarea
-            required
-            placeholder="Escribe tu publicación aquí..."
+            placeholder="Escribe algo o adjunta audio, imagen, video, PDF o enlace…"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             rows={10}

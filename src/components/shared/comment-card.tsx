@@ -83,7 +83,7 @@ export function CommentCard({
   const isHidden = status === "HIDDEN";
 
   const handleReplySubmit = async () => {
-    if (!replyText.trim() || !onReplyComment || isUploading || hasUploadError) return;
+    if ((!replyText.trim() && replyAttachments.length === 0) || !onReplyComment || isUploading || hasUploadError) return;
     setIsSubmitting(true);
     try {
       await onReplyComment(id, replyText, replyAttachments);
@@ -98,7 +98,7 @@ export function CommentCard({
   };
 
   const handleEditSubmit = async () => {
-    if (!editText.trim() || !onEditComment) return;
+    if ((!editText.trim() && attachments.length === 0) || !onEditComment) return;
     setIsSubmitting(true);
     try {
       await onEditComment(id, editText);
@@ -274,12 +274,13 @@ export function CommentCard({
             <textarea
               value={editText}
               onChange={(e) => setEditText(e.target.value)}
+              placeholder="Escribe algo o adjunta audio, imagen, video, PDF o enlace…"
               className="w-full min-h-[70px] p-3 text-xs bg-neutral-900 border border-neutral-800 rounded-2xl text-white placeholder-neutral-500 focus:outline-none focus:border-neutral-700 resize-none font-light leading-relaxed"
             />
             <div className="flex gap-1.5 self-start">
               <button
                 onClick={handleEditSubmit}
-                disabled={isSubmitting || !editText.trim()}
+                disabled={isSubmitting || (!editText.trim() && attachments.length === 0)}
                 className="rounded-full bg-white text-neutral-950 px-3.5 py-1 text-[11px] font-semibold hover:bg-neutral-200 disabled:opacity-50 transition-colors cursor-pointer"
               >
                 {isSubmitting ? "Guardando..." : "Guardar"}
@@ -330,7 +331,7 @@ export function CommentCard({
             <textarea
               value={replyText}
               onChange={(e) => setReplyText(e.target.value)}
-              placeholder={`Responder a ${authorName}...`}
+              placeholder="Escribe algo o adjunta audio, imagen, video, PDF o enlace…"
               className="w-full max-w-xl min-h-[60px] p-3 text-xs bg-neutral-905 border border-neutral-850 rounded-2xl text-white placeholder-neutral-555 focus:outline-none focus:border-neutral-750 resize-none font-light leading-relaxed"
             />
             {/* Uploader para adjuntos en respuestas */}
@@ -359,7 +360,7 @@ export function CommentCard({
               )}
               <button
                 onClick={handleReplySubmit}
-                disabled={isSubmitting || isUploading || hasUploadError || !replyText.trim()}
+                disabled={isSubmitting || isUploading || hasUploadError || (!replyText.trim() && replyAttachments.length === 0)}
                 className="rounded-full bg-white text-neutral-950 px-3.5 py-1 text-[10px] font-semibold hover:bg-neutral-200 disabled:opacity-50 transition-colors cursor-pointer"
               >
                 {isSubmitting ? "Enviando..." : isUploading ? "Subiendo..." : "Enviar"}

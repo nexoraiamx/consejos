@@ -42,7 +42,8 @@ export async function createPostAction(formData: PostInput) {
     return { success: false, error: "El título debe tener entre 5 y 256 caracteres." };
   }
 
-  if (!content) {
+  const hasAttachments = formData.attachments && formData.attachments.length > 0;
+  if (!content && !hasAttachments) {
     return { success: false, error: "El contenido de la publicación no puede estar vacío." };
   }
 
@@ -153,10 +154,6 @@ export async function updatePostAction(
     return { success: false, error: "El título debe tener entre 5 y 256 caracteres." };
   }
 
-  if (!content) {
-    return { success: false, error: "El contenido de la publicación no puede estar vacío." };
-  }
-
   const validTypes = ["QUESTION", "RESOURCE", "DISCUSSION", "CASE_STUDY"];
   if (!validTypes.includes(postType)) {
     return { success: false, error: "Tipo de publicación no válido." };
@@ -176,6 +173,18 @@ export async function updatePostAction(
 
   if (post.authorId !== user.id) {
     return { success: false, error: "No autorizado: Solo el creador puede editar esta publicación." };
+  }
+
+  const postAttachments = await db.query.attachments.findMany({
+    where: and(
+      eq(attachments.targetType, "POST"),
+      eq(attachments.targetId, postId)
+    )
+  });
+  const hasAttachments = postAttachments.length > 0;
+
+  if (!content && !hasAttachments) {
+    return { success: false, error: "El contenido de la publicación no puede estar vacío." };
   }
 
   const community = await db.query.communities.findFirst({

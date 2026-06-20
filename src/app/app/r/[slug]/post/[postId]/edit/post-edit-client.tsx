@@ -14,6 +14,7 @@ interface PostEditProps {
   initialPostType: "QUESTION" | "RESOURCE" | "DISCUSSION" | "CASE_STUDY";
   initialCategory: string;
   initialTags: string[];
+  initialHasAttachments: boolean;
 }
 
 export default function PostEditClient({
@@ -24,6 +25,7 @@ export default function PostEditClient({
   initialPostType,
   initialCategory,
   initialTags,
+  initialHasAttachments,
 }: PostEditProps) {
   const router = useRouter();
   const [title, setTitle] = useState(initialTitle);
@@ -38,6 +40,16 @@ export default function PostEditClient({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return;
+
+    if (!title.trim() || title.trim().length < 5) {
+      setErrorMessage("El título de la publicación debe tener al menos 5 caracteres.");
+      return;
+    }
+
+    if (!content.trim() && !initialHasAttachments) {
+      setErrorMessage("Escribe contenido o agrega un archivo/enlace.");
+      return;
+    }
 
     setErrorMessage(null);
     setIsLoading(true);
@@ -219,7 +231,7 @@ export default function PostEditClient({
         <div className="flex flex-col gap-2">
           <label className="text-xs font-semibold text-neutral-300">Contenido</label>
           <textarea
-            required
+            placeholder="Escribe algo o adjunta audio, imagen, video, PDF o enlace…"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             rows={10}

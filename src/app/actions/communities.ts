@@ -572,3 +572,70 @@ export async function updateCommunitySettingsAction(
   }
 }
 
+/**
+ * Server Action para soft delete de una comunidad.
+ */
+export async function deleteCommunityAction(communityId: string) {
+  const user = await requireAuth();
+
+  const community = await db.query.communities.findFirst({
+    where: and(
+      eq(communities.id, communityId),
+      isNull(communities.deletedAt)
+    )
+  });
+
+  if (!community) {
+    return { success: false, error: "La comunidad no existe o ya fue eliminada." };
+  }
+
+  // Verificar permisos:
+  const isGlobalAdmin = user.globalRole === "GLOBAL_ADMIN";
+  const isCreator = community.creatorId === user.id;
+
+  const roleInfo = await getUserCommunityRole(user.id, communityId);
+  const isCommunityAdmin = roleInfo && roleInfo.role === "COMMUNITY_ADMIN" && roleInfo.status === "APPROVED";
+
+  const canDelete = isGlobalAdmin || isCreator || isCommunityAdmin;
+
+  if (!canDelete) {
+    return { success: false, error: "No tienes permiso para eliminar esta comunidad. Solo el creador o un administrador principal pueden hacerlo." };
+  }
+
+  try {
+    await poolDb.transaction(async (tx) => {
+      // 1. Soft delete la comunidad
+      await tx.update(communities)
+        .set({
+          deletedAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(eq(communities.id, communityId));
+
+      // 2. Audit log
+      await tx.insert(auditLogs).values({
+        actorId: user.id,
+        action: "COMMUNITY_DELETE",
+        targetType: "COMMUNITY",
+        targetId: communityId,
+        description: `Comunidad eliminada (Soft delete): "${community.displayName}" (${community.slug})`,
+        metadata: {
+          communityId,
+          slug: community.slug,
+          displayName: community.displayName
+        }
+      });
+    });
+
+    revalidatePath("/app", "layout");
+    revalidatePath("/app/explore");
+    revalidatePath(`/app/r/${community.slug}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error al eliminar la comunidad:", error);
+    return { success: false, error: "Error interno al intentar eliminar la comunidad." };
+  }
+}
+
+

@@ -22,7 +22,8 @@ export async function createCommentAction(formData: CreateCommentInput) {
   const user = await requireAuth();
 
   const content = formData.content.trim();
-  if (!content) {
+  const hasAttachments = formData.attachments && formData.attachments.length > 0;
+  if (!content && !hasAttachments) {
     return { success: false, error: "El contenido del comentario no puede estar vacío." };
   }
 
@@ -174,10 +175,6 @@ export async function updateCommentAction(commentId: string, content: string) {
   const user = await requireAuth();
   const trimmedContent = content.trim();
 
-  if (!trimmedContent) {
-    return { success: false, error: "El contenido del comentario no puede estar vacío." };
-  }
-
   const comment = await db.query.comments.findFirst({
     where: and(eq(comments.id, commentId), isNull(comments.deletedAt)),
   });
@@ -188,6 +185,18 @@ export async function updateCommentAction(commentId: string, content: string) {
 
   if (comment.authorId !== user.id) {
     return { success: false, error: "No autorizado: Solo el autor puede editar su comentario." };
+  }
+
+  const commentAttachments = await db.query.attachments.findMany({
+    where: and(
+      eq(attachments.targetType, "COMMENT"),
+      eq(attachments.targetId, commentId)
+    )
+  });
+  const hasAttachments = commentAttachments.length > 0;
+
+  if (!trimmedContent && !hasAttachments) {
+    return { success: false, error: "El contenido del comentario no puede estar vacío." };
   }
 
   const post = await db.query.posts.findFirst({

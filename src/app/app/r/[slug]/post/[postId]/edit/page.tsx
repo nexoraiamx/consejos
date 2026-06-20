@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { posts, communities } from "@/db/schema";
+import { posts, communities, attachments } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { redirect, notFound } from "next/navigation";
@@ -71,6 +71,14 @@ export default async function EditPostPage({ params }: Props) {
     );
   }
 
+  const postAttachments = await db.query.attachments.findMany({
+    where: and(
+      eq(attachments.targetType, "POST"),
+      eq(attachments.targetId, postId)
+    )
+  });
+  const initialHasAttachments = postAttachments.length > 0;
+
   return (
     <PostEditClient
       postId={post.id}
@@ -80,6 +88,7 @@ export default async function EditPostPage({ params }: Props) {
       initialPostType={post.postType as "DISCUSSION" | "QUESTION" | "RESOURCE" | "CASE_STUDY"}
       initialCategory={post.category || ""}
       initialTags={post.tags}
+      initialHasAttachments={initialHasAttachments}
     />
   );
 }

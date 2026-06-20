@@ -135,6 +135,7 @@ export default async function CommunityAdminPage({ params }: Props) {
         initialRequests={requests}
         initialInvitations={invites}
         currentUserId={currentUser.id}
+        isGlobalAdmin={isGlobalAdmin}
       />
     </div>
   );
