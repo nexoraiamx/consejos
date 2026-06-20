@@ -19,6 +19,91 @@ import {
 } from "lucide-react";
 import { AttachmentInput } from "@/app/actions/posts";
 
+const compressImage = (file: File): Promise<File> => {
+  return new Promise((resolve) => {
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      return resolve(file);
+    }
+
+    // Si la imagen es menor a 500KB, no la comprimimos
+    if (file.size < 500 * 1024) {
+      return resolve(file);
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+
+        const MAX_WIDTH = 1920;
+        const MAX_HEIGHT = 1920;
+
+        if (width > MAX_WIDTH || height > MAX_HEIGHT) {
+          if (width > height) {
+            height = Math.round((height * MAX_WIDTH) / width);
+            width = MAX_WIDTH;
+          } else {
+            width = Math.round((width * MAX_HEIGHT) / height);
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          return resolve(file);
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              return resolve(file);
+            }
+
+            // Validar que el tamaño comprimido realmente sea menor
+            if (blob.size < file.size) {
+              let newName = file.name;
+              if (
+                blob.type === "image/jpeg" &&
+                !newName.toLowerCase().endsWith(".jpg") &&
+                !newName.toLowerCase().endsWith(".jpeg")
+              ) {
+                const lastDot = newName.lastIndexOf(".");
+                if (lastDot !== -1) {
+                  newName = newName.substring(0, lastDot) + ".jpg";
+                } else {
+                  newName = newName + ".jpg";
+                }
+              }
+
+              const compressedFile = new File([blob], newName, {
+                type: "image/jpeg",
+                lastModified: Date.now(),
+              });
+              resolve(compressedFile);
+            } else {
+              resolve(file);
+            }
+          },
+          "image/jpeg",
+          0.82
+        );
+      };
+      img.onerror = () => resolve(file);
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => resolve(file);
+    reader.readAsDataURL(file);
+  });
+};
+
 interface UploaderProps {
   communityId: string;
   targetType: "POST" | "COMMENT";
@@ -339,30 +424,50 @@ export function Uploader({
     return { valid: true };
   };
 
-  const handleFiles = (files: FileList | null) => {
+  const handleFiles = async (files: FileList | null) => {
     if (!files) return;
     setLocalError(null);
 
-    Array.from(files).forEach((file) => {
-      const validation = validateLocalFile(file);
-      if (!validation.valid) {
-        setLocalError(validation.error || "Archivo no válido.");
-        return;
+    const fileArray = Array.from(files);
+
+    for (const file of fileArray) {
+      // 1. Validación inicial
+      const initialValidation = validateLocalFile(file);
+      if (!initialValidation.valid) {
+        setLocalError(initialValidation.error || "Archivo no válido.");
+        continue;
+      }
+
+      // 2. Comprimir si es imagen
+      let fileToUpload = file;
+      if (file.type.startsWith("image/")) {
+        try {
+          fileToUpload = await compressImage(file);
+        } catch (err) {
+          console.error("Error al comprimir imagen:", err);
+        }
+      }
+
+      // 3. Validación final tras compresión
+      const finalValidation = validateLocalFile(fileToUpload);
+      if (!finalValidation.valid) {
+        setLocalError(finalValidation.error || "Archivo no válido.");
+        continue;
       }
 
       const taskId = crypto.randomUUID();
       const newTask: UploadTask = {
         id: taskId,
-        fileName: file.name,
-        fileSize: file.size,
-        mimeType: file.type,
+        fileName: fileToUpload.name,
+        fileSize: fileToUpload.size,
+        mimeType: fileToUpload.type,
         progress: 0,
         status: "idle",
       };
 
       setUploadTasks((prev) => [...prev, newTask]);
-      uploadFileToServer(file, taskId);
-    });
+      uploadFileToServer(fileToUpload, taskId);
+    }
   };
 
   const uploadFileToServer = async (file: File, taskId: string) => {
