@@ -1,3 +1,4 @@
+import "./db-guard";
 import { db, poolDb } from "../src/db";
 import { communities, communityMembers } from "../src/db/schema";
 import { eq, and } from "drizzle-orm";

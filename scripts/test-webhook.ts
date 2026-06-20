@@ -1,16 +1,15 @@
-if (process.env.VERCEL === "1" || process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production") {
-  console.error("ERROR: No se permite ejecutar scripts de prueba/sembrado destructivos en un entorno de producción o Vercel.");
-  process.exit(1);
-}
+// 1. Load environment variables
+try {
+  process.loadEnvFile(".env.local");
+} catch (e) {}
+
+import "./db-guard";
 
 import { Webhook } from "svix";
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import * as schema from "../src/db/schema";
 import { eq } from "drizzle-orm";
-
-// 1. Load environment variables
-process.loadEnvFile(".env.local");
 
 async function runTest() {
   console.log("=== INICIANDO PRUEBA LOCAL DE WEBHOOK CLERK ===");

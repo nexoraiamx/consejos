@@ -1,8 +1,4 @@
-if (process.env.VERCEL === "1" || process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production") {
-  console.error("ERROR: No se permite ejecutar scripts de prueba/sembrado destructivos en un entorno de producción o Vercel.");
-  process.exit(1);
-}
-
+import "./db-guard";
 import { db, poolDb } from "@/db";
 import { 
   users, 
@@ -15,7 +11,7 @@ import {
   auditLogs, 
   userReputation 
 } from "@/db/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, inArray, or } from "drizzle-orm";
 import { createNotificationTx } from "@/lib/notifications";
 import { SYSTEM_TARGET_ID } from "@/lib/constants";
 
@@ -31,21 +27,16 @@ async function testNotificationsFlow() {
   try {
     // 1. Limpieza de datos residuales
     console.log("Limpiando datos de pruebas previas...");
-    await db.delete(notifications).execute();
-    await db.delete(auditLogs).execute();
-    await db.delete(comments).execute();
-    await db.delete(posts).execute();
-    await db.delete(communityMembers).execute();
+    const testUserIds = [userIdPostAuthor, userIdCommenter, userIdModerator];
+    await db.delete(notifications).where(or(inArray(notifications.recipientId, testUserIds), inArray(notifications.senderId, testUserIds))).execute();
+    await db.delete(comments).where(inArray(comments.authorId, testUserIds)).execute();
+    await db.delete(posts).where(inArray(posts.authorId, testUserIds)).execute();
+    await db.delete(communityMembers).where(inArray(communityMembers.userId, testUserIds)).execute();
+    await db.delete(auditLogs).where(inArray(auditLogs.actorId, testUserIds)).execute();
     await db.delete(communities).where(eq(communities.slug, communitySlug)).execute();
-    await db.delete(userReputation).where(eq(userReputation.userId, userIdPostAuthor)).execute();
-    await db.delete(userReputation).where(eq(userReputation.userId, userIdCommenter)).execute();
-    await db.delete(userReputation).where(eq(userReputation.userId, userIdModerator)).execute();
-    await db.delete(profiles).where(eq(profiles.userId, userIdPostAuthor)).execute();
-    await db.delete(profiles).where(eq(profiles.userId, userIdCommenter)).execute();
-    await db.delete(profiles).where(eq(profiles.userId, userIdModerator)).execute();
-    await db.delete(users).where(eq(users.id, userIdPostAuthor)).execute();
-    await db.delete(users).where(eq(users.id, userIdCommenter)).execute();
-    await db.delete(users).where(eq(users.id, userIdModerator)).execute();
+    await db.delete(userReputation).where(inArray(userReputation.userId, testUserIds)).execute();
+    await db.delete(profiles).where(inArray(profiles.userId, testUserIds)).execute();
+    await db.delete(users).where(inArray(users.id, testUserIds)).execute();
 
     // 2. Sembrar Usuarios
     console.log("Creando usuarios de prueba...");
@@ -301,20 +292,15 @@ async function testNotificationsFlow() {
   } finally {
     // Limpieza final de datos sembrados
     console.log("\nLimpiando datos sembrados de prueba de notificaciones...");
-    await db.delete(notifications).execute();
-    await db.delete(comments).execute();
-    await db.delete(posts).execute();
-    await db.delete(communityMembers).execute();
+    const testUserIds = [userIdPostAuthor, userIdCommenter, userIdModerator];
+    await db.delete(notifications).where(or(inArray(notifications.recipientId, testUserIds), inArray(notifications.senderId, testUserIds))).execute();
+    await db.delete(comments).where(inArray(comments.authorId, testUserIds)).execute();
+    await db.delete(posts).where(inArray(posts.authorId, testUserIds)).execute();
+    await db.delete(communityMembers).where(inArray(communityMembers.userId, testUserIds)).execute();
     await db.delete(communities).where(eq(communities.slug, communitySlug)).execute();
-    await db.delete(userReputation).where(eq(userReputation.userId, userIdPostAuthor)).execute();
-    await db.delete(userReputation).where(eq(userReputation.userId, userIdCommenter)).execute();
-    await db.delete(userReputation).where(eq(userReputation.userId, userIdModerator)).execute();
-    await db.delete(profiles).where(eq(profiles.userId, userIdPostAuthor)).execute();
-    await db.delete(profiles).where(eq(profiles.userId, userIdCommenter)).execute();
-    await db.delete(profiles).where(eq(profiles.userId, userIdModerator)).execute();
-    await db.delete(users).where(eq(users.id, userIdPostAuthor)).execute();
-    await db.delete(users).where(eq(users.id, userIdCommenter)).execute();
-    await db.delete(users).where(eq(users.id, userIdModerator)).execute();
+    await db.delete(userReputation).where(inArray(userReputation.userId, testUserIds)).execute();
+    await db.delete(profiles).where(inArray(profiles.userId, testUserIds)).execute();
+    await db.delete(users).where(inArray(users.id, testUserIds)).execute();
     console.log("Limpieza terminada. Base de datos restaurada.");
   }
 }

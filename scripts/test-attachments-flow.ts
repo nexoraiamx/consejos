@@ -1,11 +1,7 @@
-if (process.env.VERCEL === "1" || process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production") {
-  console.error("ERROR: No se permite ejecutar scripts de prueba/sembrado destructivos en un entorno de producción o Vercel.");
-  process.exit(1);
-}
-
+import "./db-guard";
 import { db, poolDb } from "@/db";
 import { users, profiles, communities, communityMembers, posts, comments, attachments, auditLogs } from "@/db/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, inArray } from "drizzle-orm";
 import { validateFile, generateFileKey } from "@/lib/r2";
 
 async function runTests() {
@@ -21,11 +17,12 @@ async function runTests() {
   try {
     // 1. Limpieza de datos residuales
     console.log("[1/6] Limpiando datos residuales de pruebas previas...");
-    await db.delete(auditLogs).execute();
-    await db.delete(attachments).execute();
-    await db.delete(comments).execute();
-    await db.delete(posts).execute();
-    await db.delete(communityMembers).execute();
+    const testUserIds = [uploaderId, nonMemberId, suspendedId];
+    await db.delete(comments).where(inArray(comments.authorId, testUserIds)).execute();
+    await db.delete(posts).where(inArray(posts.authorId, testUserIds)).execute();
+    await db.delete(attachments).where(inArray(attachments.uploaderId, testUserIds)).execute();
+    await db.delete(communityMembers).where(inArray(communityMembers.userId, testUserIds)).execute();
+    await db.delete(auditLogs).where(inArray(auditLogs.actorId, testUserIds)).execute();
     
     const existingCommunity = await db.query.communities.findFirst({
       where: eq(communities.slug, communitySlug),
@@ -34,13 +31,8 @@ async function runTests() {
       await db.delete(communities).where(eq(communities.id, existingCommunity.id)).execute();
     }
     
-    await db.delete(profiles).where(eq(profiles.userId, uploaderId)).execute();
-    await db.delete(profiles).where(eq(profiles.userId, nonMemberId)).execute();
-    await db.delete(profiles).where(eq(profiles.userId, suspendedId)).execute();
-    
-    await db.delete(users).where(eq(users.id, uploaderId)).execute();
-    await db.delete(users).where(eq(users.id, nonMemberId)).execute();
-    await db.delete(users).where(eq(users.id, suspendedId)).execute();
+    await db.delete(profiles).where(inArray(profiles.userId, testUserIds)).execute();
+    await db.delete(users).where(inArray(users.id, testUserIds)).execute();
 
     // 2. Sembrar Usuarios
     console.log("[2/6] Creando usuarios de prueba...");
@@ -303,11 +295,12 @@ async function runTests() {
     // 7. Limpieza final de datos sembrados
     console.log("\nLimpiando datos de prueba...");
     try {
-      await db.delete(auditLogs).execute();
-      await db.delete(attachments).execute();
-      await db.delete(comments).execute();
-      await db.delete(posts).execute();
-      await db.delete(communityMembers).execute();
+      const testUserIds = [uploaderId, nonMemberId, suspendedId];
+      await db.delete(comments).where(inArray(comments.authorId, testUserIds)).execute();
+      await db.delete(posts).where(inArray(posts.authorId, testUserIds)).execute();
+      await db.delete(attachments).where(inArray(attachments.uploaderId, testUserIds)).execute();
+      await db.delete(communityMembers).where(inArray(communityMembers.userId, testUserIds)).execute();
+      await db.delete(auditLogs).where(inArray(auditLogs.actorId, testUserIds)).execute();
       
       const existingCommunity = await db.query.communities.findFirst({
         where: eq(communities.slug, communitySlug),
@@ -316,13 +309,8 @@ async function runTests() {
         await db.delete(communities).where(eq(communities.id, existingCommunity.id)).execute();
       }
       
-      await db.delete(profiles).where(eq(profiles.userId, uploaderId)).execute();
-      await db.delete(profiles).where(eq(profiles.userId, nonMemberId)).execute();
-      await db.delete(profiles).where(eq(profiles.userId, suspendedId)).execute();
-      
-      await db.delete(users).where(eq(users.id, uploaderId)).execute();
-      await db.delete(users).where(eq(users.id, nonMemberId)).execute();
-      await db.delete(users).where(eq(users.id, suspendedId)).execute();
+      await db.delete(profiles).where(inArray(profiles.userId, testUserIds)).execute();
+      await db.delete(users).where(inArray(users.id, testUserIds)).execute();
       console.log("Limpieza completada.");
     } catch (cleanErr) {
       console.error("Error al limpiar datos:", cleanErr);

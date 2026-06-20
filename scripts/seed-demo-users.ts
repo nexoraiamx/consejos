@@ -1,3 +1,4 @@
+import "./db-guard";
 import { db, poolDb } from "@/db";
 import { 
   users, 

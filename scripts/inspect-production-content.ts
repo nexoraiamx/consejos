@@ -1,5 +1,6 @@
 import { poolDb } from "../src/db";
 import { 
+  users,
   communities, 
   posts, 
   comments, 
@@ -64,6 +65,18 @@ async function inspectProductionContent() {
     console.log(`- Total Adjuntos (Attachments): ${attachmentsCount.value}`);
     console.log(`- Total Miembros de Comunidades (Memberships): ${membersCount.value}`);
     console.log("========================\n");
+
+    // 2.5 Mostrar usuarios y roles
+    console.log("=== USUARIOS REGISTRADOS ===");
+    const allUsers = await poolDb.select({
+      id: users.id,
+      email: users.email,
+      globalRole: users.globalRole
+    }).from(users);
+    allUsers.forEach(u => {
+      console.log(`- [${u.id}] Email: ${u.email} | Rol: ${u.globalRole}`);
+    });
+    console.log("============================\n");
 
     // 3. Mostrar comunidades activas y sus slugs
     console.log("=== COMUNIDADES ENCONTRADAS ===");
