@@ -16,6 +16,11 @@ import {
 import { eq, and } from "drizzle-orm";
 
 async function runSeed() {
+  if (process.env.VERCEL === "1" || process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production") {
+    console.error("ERROR: No se permite ejecutar scripts de prueba/sembrado destructivos en un entorno de producción o Vercel.");
+    process.exit(1);
+  }
+
   console.log("====================================================");
   console.log("Iniciando sembrado de datos demo para Producción...");
   console.log("====================================================");

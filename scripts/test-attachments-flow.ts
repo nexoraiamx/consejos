@@ -1,3 +1,8 @@
+if (process.env.VERCEL === "1" || process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production") {
+  console.error("ERROR: No se permite ejecutar scripts de prueba/sembrado destructivos en un entorno de producción o Vercel.");
+  process.exit(1);
+}
+
 import { db, poolDb } from "@/db";
 import { users, profiles, communities, communityMembers, posts, comments, attachments, auditLogs } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";

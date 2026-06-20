@@ -7,6 +7,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ShieldAlert } from "lucide-react";
 import AdminClient from "./admin-client";
+import { getCommunityOrRedirect } from "@/lib/community-helpers";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -23,16 +24,7 @@ export default async function CommunityAdminPage({ params }: Props) {
   }
 
   // 1. Obtener la comunidad
-  const community = await db.query.communities.findFirst({
-    where: and(
-      eq(communities.slug, slug),
-      isNull(communities.deletedAt)
-    ),
-  });
-
-  if (!community) {
-    notFound();
-  }
+  const community = await getCommunityOrRedirect(slug, "/admin");
 
   // 2. Validar rol y permisos del usuario (owner, COMMUNITY_ADMIN o GLOBAL_ADMIN)
   const isGlobalAdmin = currentUser.globalRole === "GLOBAL_ADMIN";

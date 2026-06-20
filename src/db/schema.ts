@@ -366,3 +366,21 @@ export const joinRequests = pgTable(
   })
 );
 
+
+// 17. COMMUNITY SLUG REDIRECTS TABLE
+export const communitySlugRedirects = pgTable(
+  "community_slug_redirects",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    oldSlug: varchar("old_slug", { length: 100 }).unique().notNull(),
+    newSlug: varchar("new_slug", { length: 100 }).notNull(),
+    communityId: uuid("community_id")
+      .references(() => communities.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    oldSlugIdx: index("old_slug_idx").on(table.oldSlug),
+  })
+);
+

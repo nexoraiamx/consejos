@@ -98,6 +98,7 @@ export default function AdminClient({
   
   // Settings Form State
   const [displayName, setDisplayName] = useState(community.displayName);
+  const [slug, setSlug] = useState(community.slug);
   const [description, setDescription] = useState(community.description || "");
   const [privacyType, setPrivacyType] = useState<"PUBLIC" | "PRIVATE" | "INVITE_ONLY">(
     community.privacyType as "PUBLIC" | "PRIVATE" | "INVITE_ONLY"
@@ -259,6 +260,17 @@ export default function AdminClient({
       alert("El nombre debe tener al menos 3 caracteres.");
       return;
     }
+
+    const cleanSlug = slug.trim().toLowerCase();
+    if (!/^[a-z0-9-]+$/.test(cleanSlug)) {
+      alert("El slug solo puede contener letras minúsculas, números y guiones.");
+      return;
+    }
+    if (cleanSlug.length < 3 || cleanSlug.length > 50) {
+      alert("El slug debe tener entre 3 y 50 caracteres.");
+      return;
+    }
+
     setIsSavingSettings(true);
     try {
       const res = await updateCommunitySettingsAction(
@@ -268,11 +280,16 @@ export default function AdminClient({
         privacyType,
         avatarUrl,
         bannerUrl,
-        category
+        category,
+        cleanSlug
       );
       if (res.success) {
         alert("Configuración guardada correctamente.");
-        router.refresh();
+        if (cleanSlug !== community.slug) {
+          router.push(`/app/r/${cleanSlug}/admin`);
+        } else {
+          router.refresh();
+        }
       } else {
         alert(res.error || "No se pudo guardar la configuración.");
       }
@@ -658,6 +675,27 @@ export default function AdminClient({
                 className="w-full rounded-2xl bg-neutral-950 border border-neutral-900 px-4 py-3 text-xs font-medium text-white placeholder-neutral-600 focus:outline-none focus:border-neutral-700 transition-all"
                 placeholder="Ej. Programadores Next.js"
               />
+            </div>
+
+            {/* Slug / URL */}
+            <div className="flex flex-col gap-2">
+              <label htmlFor="slug" className="text-xs font-semibold text-neutral-400">
+                URL de la comunidad (slug)
+              </label>
+              <div className="flex items-center gap-1.5 w-full rounded-2xl bg-neutral-950 border border-neutral-900 px-4 py-3 text-xs font-medium text-white">
+                <span className="text-neutral-500 font-light select-none">/app/r/</span>
+                <input
+                  id="slug"
+                  type="text"
+                  value={slug}
+                  onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, "-"))}
+                  className="flex-1 bg-transparent focus:outline-none text-white placeholder-neutral-600"
+                  placeholder="ej-mi-comunidad"
+                />
+              </div>
+              <p className="text-[10px] text-neutral-500 font-light leading-relaxed">
+                El slug define la dirección web única de tu comunidad. Cambiar el slug redireccionará automáticamente las URLs antiguas a la nueva. Solo se permiten letras minúsculas, números y guiones.
+              </p>
             </div>
 
             {/* Descripción */}

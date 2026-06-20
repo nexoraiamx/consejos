@@ -4,6 +4,7 @@ import { eq, and, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { redirect, notFound } from "next/navigation";
 import PostEditClient from "./post-edit-client";
+import { getCommunityOrRedirect } from "@/lib/community-helpers";
 
 interface Props {
   params: Promise<{ slug: string; postId: string }>;
@@ -27,16 +28,7 @@ export default async function EditPostPage({ params }: Props) {
   }
 
   // Buscar comunidad
-  const community = await db.query.communities.findFirst({
-    where: and(
-      eq(communities.slug, slug),
-      isNull(communities.deletedAt)
-    ),
-  });
-
-  if (!community) {
-    notFound();
-  }
+  const community = await getCommunityOrRedirect(slug, `/post/${postId}/edit`);
 
   // Buscar publicación y validar autoría
   const post = await db.query.posts.findFirst({

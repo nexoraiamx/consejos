@@ -1,7 +1,7 @@
 "use server";
 
 import { db, poolDb } from "@/db";
-import { communities, communityMembers, auditLogs, invitations, joinRequests, posts, comments, attachments } from "@/db/schema";
+import { communities, communityMembers, auditLogs, invitations, joinRequests, posts, comments, attachments, communitySlugRedirects } from "@/db/schema";
 import { eq, and, isNull, or, inArray } from "drizzle-orm";
 import { requireAuth, getUserCommunityRole } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
@@ -535,7 +535,8 @@ export async function updateCommunitySettingsAction(
   privacyType: "PUBLIC" | "PRIVATE" | "INVITE_ONLY",
   avatarUrl?: string | null,
   bannerUrl?: string | null,
-  category?: string | null
+  category?: string | null,
+  newSlug?: string
 ) {
   const user = await requireAuth();
 
@@ -548,24 +549,97 @@ export async function updateCommunitySettingsAction(
     return { success: false, error: "No tienes permiso para actualizar los ajustes de esta comunidad." };
   }
 
-  try {
-    await db.update(communities)
-      .set({
-        displayName: displayName.trim(),
-        description: description.trim() || null,
-        privacyType,
-        avatarUrl: avatarUrl || null,
-        bannerUrl: bannerUrl || null,
-        category: category || null,
-        updatedAt: new Date()
-      })
-      .where(eq(communities.id, communityId));
+  const community = await db.query.communities.findFirst({
+    where: and(eq(communities.id, communityId), isNull(communities.deletedAt))
+  });
+  if (!community) {
+    return { success: false, error: "La comunidad no existe o fue eliminada." };
+  }
 
-    const comm = await db.query.communities.findFirst({ where: eq(communities.id, communityId) });
-    if (comm) {
-      revalidatePath(`/app/r/${comm.slug}`);
-      revalidatePath(`/app/r/${comm.slug}/admin`);
+  let slugToSave = community.slug;
+  let slugChanged = false;
+
+  if (newSlug) {
+    const cleanNewSlug = newSlug.trim().toLowerCase();
+    if (cleanNewSlug !== community.slug) {
+      // Validate format
+      if (!/^[a-z0-9-]+$/.test(cleanNewSlug)) {
+        return { success: false, error: "El slug solo puede contener letras minúsculas, números y guiones." };
+      }
+      if (cleanNewSlug.length < 3 || cleanNewSlug.length > 50) {
+        return { success: false, error: "El slug debe tener entre 3 y 50 caracteres." };
+      }
+      // Check unicidad in active communities
+      const existingSlug = await db.query.communities.findFirst({
+        where: and(
+          eq(communities.slug, cleanNewSlug),
+          isNull(communities.deletedAt)
+        )
+      });
+      if (existingSlug) {
+        return { success: false, error: "Este slug ya está en uso por otra comunidad." };
+      }
+      // Check if this slug is an old slug in communitySlugRedirects for a different community
+      const existingRedirect = await db.query.communitySlugRedirects.findFirst({
+        where: eq(communitySlugRedirects.oldSlug, cleanNewSlug)
+      });
+      if (existingRedirect && existingRedirect.communityId !== communityId) {
+        return { success: false, error: "Este slug está reservado por una redirección de otra comunidad." };
+      }
+      slugToSave = cleanNewSlug;
+      slugChanged = true;
     }
+  }
+
+  try {
+    await poolDb.transaction(async (tx) => {
+      // 1. Actualizar configuración e imágenes
+      await tx.update(communities)
+        .set({
+          displayName: displayName.trim(),
+          description: description.trim() || null,
+          privacyType,
+          avatarUrl: avatarUrl || null,
+          bannerUrl: bannerUrl || null,
+          category: category || null,
+          slug: slugToSave,
+          updatedAt: new Date()
+        })
+        .where(eq(communities.id, communityId));
+
+      // 2. Si el slug cambió, procesar redirecciones
+      if (slugChanged) {
+        // Eliminar cualquier redirección antigua donde oldSlug sea el nuevo slug (evitar bucles)
+        await tx.delete(communitySlugRedirects)
+          .where(eq(communitySlugRedirects.oldSlug, slugToSave));
+
+        // Insertar la redirección del slug anterior al nuevo
+        await tx.insert(communitySlugRedirects).values({
+          oldSlug: community.slug,
+          newSlug: slugToSave,
+          communityId: communityId
+        });
+
+        // Actualizar redirecciones anteriores que apuntaban al slug viejo para que apunten al nuevo
+        await tx.update(communitySlugRedirects)
+          .set({ newSlug: slugToSave })
+          .where(and(
+            eq(communitySlugRedirects.communityId, communityId),
+            eq(communitySlugRedirects.newSlug, community.slug)
+          ));
+      }
+    });
+
+    // Revalidar rutas
+    revalidatePath(`/app/r/${community.slug}`);
+    revalidatePath(`/app/r/${community.slug}/admin`);
+    if (slugChanged) {
+      revalidatePath(`/app/r/${slugToSave}`);
+      revalidatePath(`/app/r/${slugToSave}/admin`);
+    }
+    revalidatePath("/app", "layout");
+    revalidatePath("/app/explore");
+
     return { success: true };
   } catch (error) {
     console.error("Error al actualizar comunidad:", error);

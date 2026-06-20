@@ -7,6 +7,7 @@ import Link from "next/link";
 import JoinButton from "./join-button";
 import { notFound } from "next/navigation";
 import { PostCard } from "@/components/shared/post-card";
+import { getCommunityOrRedirect } from "@/lib/community-helpers";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -34,17 +35,8 @@ export default async function CommunityDetailPage({ params }: Props) {
   const { slug } = await params;
   const currentUser = await getCurrentUser();
 
-  // 1. Consultar la comunidad en Neon DB
-  const community = await db.query.communities.findFirst({
-    where: and(
-      eq(communities.slug, slug),
-      isNull(communities.deletedAt)
-    ),
-  });
-
-  if (!community) {
-    notFound();
-  }
+  // 1. Consultar la comunidad en Neon DB o redirigir
+  const community = await getCommunityOrRedirect(slug);
 
   // 2. Cantidad de miembros con APPROVED o approved
   const [countResult] = await db

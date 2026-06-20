@@ -23,6 +23,7 @@ import {
   LockKeyhole
 } from "lucide-react";
 import Link from "next/link";
+import { getCommunityOrRedirect } from "@/lib/community-helpers";
 
 interface Props {
   params: Promise<{ slug: string; postId: string }>;
@@ -41,16 +42,7 @@ export default async function PostDetailPage({ params }: Props) {
   const currentUser = await getCurrentUser();
 
   // 1. Obtener detalles de la comunidad
-  const community = await db.query.communities.findFirst({
-    where: and(
-      eq(communities.slug, slug),
-      isNull(communities.deletedAt)
-    ),
-  });
-
-  if (!community) {
-    notFound();
-  }
+  const community = await getCommunityOrRedirect(slug, `/post/${postId}`);
 
   // 2. Obtener detalles del post con autor y reputación
   const [postResult] = await db

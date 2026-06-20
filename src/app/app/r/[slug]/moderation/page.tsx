@@ -6,6 +6,7 @@ import { notFound, redirect } from "next/navigation";
 import ModerationClient from "./moderation-client";
 import Link from "next/link";
 import { ArrowLeft, ShieldAlert } from "lucide-react";
+import { getCommunityOrRedirect } from "@/lib/community-helpers";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -22,13 +23,7 @@ export default async function CommunityModerationPage({ params }: Props) {
   }
 
   // 1. Obtener comunidad
-  const community = await db.query.communities.findFirst({
-    where: and(eq(communities.slug, slug), isNull(communities.deletedAt)),
-  });
-
-  if (!community) {
-    notFound();
-  }
+  const community = await getCommunityOrRedirect(slug, "/moderation");
 
   // 2. Validar rol y permisos de moderación
   const isGlobalAdmin = currentUser.globalRole === "GLOBAL_ADMIN";

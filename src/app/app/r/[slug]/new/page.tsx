@@ -4,6 +4,7 @@ import { eq, and, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { redirect, notFound } from "next/navigation";
 import PostFormClient from "./post-form-client";
+import { getCommunityOrRedirect } from "@/lib/community-helpers";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -21,16 +22,7 @@ export default async function NewPostPage({ params }: Props) {
   }
 
   // Buscar comunidad
-  const community = await db.query.communities.findFirst({
-    where: and(
-      eq(communities.slug, slug),
-      isNull(communities.deletedAt)
-    ),
-  });
-
-  if (!community) {
-    notFound();
-  }
+  const community = await getCommunityOrRedirect(slug, "/new");
 
   // Validar permisos
   const isGlobalAdmin = user.globalRole === "GLOBAL_ADMIN";
