@@ -1,6 +1,7 @@
 import Module from "module";
 
 let activeUserId = "user_creator";
+const capturedDeletedKeys: string[] = [];
 
 // Sobrescribir require al inicio del archivo para interceptar Clerk, server-only y next/cache
 const originalRequire = Module.prototype.require;
@@ -27,6 +28,23 @@ Module.prototype.require = function (id: string) {
       })
     };
   }
+
+  if (id === "@aws-sdk/client-s3") {
+    const originalS3 = originalRequire.apply(this, [id]);
+    return {
+      ...originalS3,
+      S3Client: class {
+        send = async (command: any) => {
+          if (command.constructor.name === "DeleteObjectsCommand") {
+            const objects = command.input?.Delete?.Objects || [];
+            capturedDeletedKeys.push(...objects.map((o: any) => o.Key));
+            console.log("[MOCK S3] Deleted objects:", objects);
+          }
+          return { Deleted: [] };
+        };
+      }
+    };
+  }
   
   // @ts-ignore
   return originalRequire.apply(this, [id]);
@@ -45,7 +63,8 @@ async function runTests() {
     posts, 
     comments, 
     attachments, 
-    userReputation 
+    userReputation,
+    auditLogs
   } = require("../src/db/schema");
   const { eq, and, isNull } = require("drizzle-orm");
 
@@ -65,13 +84,14 @@ async function runTests() {
   try {
     // 1. Limpieza de datos previos
     console.log("Limpiando datos de prueba previos...");
+    await db.delete(attachments).where(eq(attachments.uploaderId, creatorId)).execute();
+    await db.delete(attachments).where(eq(attachments.uploaderId, memberId)).execute();
+
     const oldComm = await db.query.communities.findFirst({
-      where: and(eq(communities.slug, slugTest), isNull(communities.deletedAt)),
+      where: eq(communities.slug, slugTest),
     });
 
     if (oldComm) {
-      await db.delete(attachments).where(eq(attachments.uploaderId, creatorId)).execute();
-      await db.delete(attachments).where(eq(attachments.uploaderId, memberId)).execute();
       await db.delete(comments).where(eq(comments.postId, oldComm.id)).execute();
       await db.delete(posts).where(eq(posts.communityId, oldComm.id)).execute();
       await db.delete(communityMembers).where(eq(communityMembers.communityId, oldComm.id)).execute();
@@ -103,6 +123,8 @@ async function runTests() {
       description: "Pruebas de adjuntos y soft delete",
       privacyType: "PUBLIC",
       creatorId: creatorId,
+      avatarUrl: "https://r2.consejos.dev/uploads/user_creator/communities/comm-test-media-deletion/avatar.png",
+      bannerUrl: "https://r2.consejos.dev/uploads/user_creator/communities/comm-test-media-deletion/banner.png",
     }).returning();
 
     // Sembrar membresías
@@ -126,10 +148,17 @@ async function runTests() {
       attachments: [
         {
           fileUrl: "https://r2.consejos.dev/audio1.mp3",
-          fileKey: "audio1.mp3",
+          fileKey: "uploads/user_member/comm-test-media-deletion/posts/audio1.mp3",
           fileName: "audio1.mp3",
           fileSize: 1024,
           mimeType: "audio/mpeg"
+        },
+        {
+          fileUrl: "https://google.com",
+          fileKey: "external",
+          fileName: "Link Externo",
+          fileSize: 0,
+          mimeType: "text/plain"
         }
       ]
     });
@@ -198,7 +227,7 @@ async function runTests() {
       attachments: [
         {
           fileUrl: "https://r2.consejos.dev/pdf1.pdf",
-          fileKey: "pdf1.pdf",
+          fileKey: "uploads/user_member/comm-test-media-deletion/comments/pdf1.pdf",
           fileName: "pdf1.pdf",
           fileSize: 2048,
           mimeType: "application/pdf"
@@ -266,6 +295,61 @@ async function runTests() {
       throw new Error("FALLO: La comunidad no tiene establecido deletedAt en base de datos.");
     }
     console.log("ÉXITO: La comunidad fue marcada físicamente con deletedAt:", dbCommDeleted.deletedAt);
+
+    // Verificar que R2 intentó eliminar los archivos correctos
+    console.log("Verificando que se enviaron las claves correctas a R2 y se omitieron los links externos...");
+    const expectedKeys = [
+      "uploads/user_creator/communities/comm-test-media-deletion/avatar.png",
+      "uploads/user_creator/communities/comm-test-media-deletion/banner.png",
+      "uploads/user_member/comm-test-media-deletion/posts/audio1.mp3",
+      "uploads/user_member/comm-test-media-deletion/comments/pdf1.pdf"
+    ];
+
+    for (const key of expectedKeys) {
+      if (!capturedDeletedKeys.includes(key)) {
+        throw new Error(`FALLO: No se intentó eliminar la clave esperada en R2: ${key}`);
+      }
+    }
+
+    if (capturedDeletedKeys.includes("external")) {
+      throw new Error("FALLO: Se intentó eliminar la clave 'external' (enlace externo).");
+    }
+    console.log("ÉXITO: Se enviaron las claves correctas a R2 y se omitió 'external'.");
+
+    // Verificar audit logs
+    const r2AuditLog = await db.query.auditLogs.findFirst({
+      where: and(
+        eq(auditLogs.targetId, community.id),
+        eq(auditLogs.action, "COMMUNITY_R2_CLEANUP_SUCCESS")
+      )
+    });
+    if (!r2AuditLog) {
+      throw new Error("FALLO: No se registró el audit log COMMUNITY_R2_CLEANUP_SUCCESS.");
+    }
+    console.log("ÉXITO: Se registró el audit log de limpieza de R2:", r2AuditLog.description);
+
+    // Verificar que los posts de la comunidad eliminada no aparecen en el feed activo (usando la misma query del feed)
+    console.log("\n--- Prueba M: Verificar que posts de la comunidad eliminada no aparecen en el feed ---");
+    const feedPosts = await db
+      .select({
+        id: posts.id,
+        communityId: posts.communityId,
+      })
+      .from(posts)
+      .innerJoin(communities, eq(posts.communityId, communities.id))
+      .where(
+        and(
+          isNull(posts.deletedAt),
+          isNull(communities.deletedAt),
+          eq(posts.status, "ACTIVE")
+        )
+      );
+
+    const hasDeletedCommPosts = feedPosts.some((p: any) => p.communityId === community.id);
+    if (hasDeletedCommPosts) {
+      throw new Error("FALLO: El feed activo contiene publicaciones de una comunidad eliminada.");
+    }
+    console.log("ÉXITO: Las publicaciones de la comunidad eliminada no se muestran en el feed.");
 
     // ==========================================
     // SECCIÓN 4: PRUEBAS DE ELIMINACIÓN POR GLOBAL ADMIN / COMMUNITY ADMIN (RE-CREACIÓN Y NUEVAS PRUEBAS)

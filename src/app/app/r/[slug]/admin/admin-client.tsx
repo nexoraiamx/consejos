@@ -791,7 +791,7 @@ export default function AdminClient({
               <div className="flex flex-col gap-1">
                 <h3 className="text-sm font-semibold text-red-400 font-heading">Zona de Peligro: Eliminar Comunidad</h3>
                 <p className="text-xs text-neutral-400 font-light leading-relaxed">
-                  La comunidad se ocultará permanentemente y sus publicaciones dejarán de aparecer en el feed de la aplicación. Esta acción no se puede deshacer.
+                  La comunidad se ocultará permanentemente y sus publicaciones dejarán de aparecer en el feed de la aplicación. También se eliminarán los archivos multimedia asociados a esta comunidad. Esta acción no se puede deshacer.
                 </p>
               </div>
             </div>

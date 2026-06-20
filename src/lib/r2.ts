@@ -1,4 +1,4 @@
-import { S3Client } from "@aws-sdk/client-s3";
+import { S3Client, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 
 const accountId = process.env.R2_ACCOUNT_ID || "dummy-account-id";
 const accessKeyId = process.env.R2_ACCESS_KEY_ID || "dummy-key-id";
@@ -136,5 +136,37 @@ export function generateFileKey(
     // Draft / New post/comment
     const session = uploadSessionId || crypto.randomUUID();
     return `uploads/${userId}/${commId}/drafts/${session}/${randomUuid}-${sanitizedName}`;
+  }
+}
+
+/**
+ * Deletes multiple objects from Cloudflare R2 bucket.
+ */
+export async function deleteR2Objects(fileKeys: string[]): Promise<{ success: boolean; error?: string }> {
+  // Exclude "external", empty/null, or absolute URLs
+  const keysToDelete = fileKeys.filter(
+    (key) => key && key !== "external" && !key.startsWith("http://") && !key.startsWith("https://")
+  );
+
+  if (keysToDelete.length === 0) {
+    return { success: true };
+  }
+
+  const bucketName = process.env.R2_BUCKET_NAME || "consejos-attachments";
+
+  try {
+    const command = new DeleteObjectsCommand({
+      Bucket: bucketName,
+      Delete: {
+        Objects: keysToDelete.map((key) => ({ Key: key })),
+        Quiet: true,
+      },
+    });
+
+    await s3Client.send(command);
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error deleting objects from R2:", error);
+    return { success: false, error: error.message || String(error) };
   }
 }

@@ -1,11 +1,12 @@
 "use server";
 
 import { db, poolDb } from "@/db";
-import { communities, communityMembers, auditLogs, invitations, joinRequests } from "@/db/schema";
-import { eq, and, isNull, or } from "drizzle-orm";
+import { communities, communityMembers, auditLogs, invitations, joinRequests, posts, comments, attachments } from "@/db/schema";
+import { eq, and, isNull, or, inArray } from "drizzle-orm";
 import { requireAuth, getUserCommunityRole } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { createNotificationTx } from "@/lib/notifications";
+import { deleteR2Objects } from "@/lib/r2";
 
 interface CreateCommunityInput {
   displayName: string;
@@ -572,6 +573,15 @@ export async function updateCommunitySettingsAction(
   }
 }
 
+function extractFileKeyFromUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const index = url.indexOf("uploads/");
+  if (index !== -1) {
+    return url.substring(index);
+  }
+  return null;
+}
+
 /**
  * Server Action para soft delete de una comunidad.
  */
@@ -602,6 +612,69 @@ export async function deleteCommunityAction(communityId: string) {
     return { success: false, error: "No tienes permiso para eliminar esta comunidad. Solo el creador o un administrador principal pueden hacerlo." };
   }
 
+  // Recopilar fileKeys a eliminar de R2
+  const fileKeysToDelete: string[] = [];
+
+  try {
+    // 1. Obtener avatar y banner de la comunidad
+    if (community.avatarUrl) {
+      const avatarKey = extractFileKeyFromUrl(community.avatarUrl);
+      if (avatarKey) fileKeysToDelete.push(avatarKey);
+    }
+    if (community.bannerUrl) {
+      const bannerKey = extractFileKeyFromUrl(community.bannerUrl);
+      if (bannerKey) fileKeysToDelete.push(bannerKey);
+    }
+
+    // 2. Obtener todos los posts de esta comunidad (incluyendo los que tengan soft-delete o no)
+    const communityPosts = await db.query.posts.findMany({
+      columns: { id: true },
+      where: eq(posts.communityId, communityId),
+    });
+
+    if (communityPosts.length > 0) {
+      const postIds = communityPosts.map((p) => p.id);
+
+      // 3. Obtener comentarios de esos posts
+      const postComments = await db.query.comments.findMany({
+        columns: { id: true },
+        where: inArray(comments.postId, postIds),
+      });
+      const commentIds = postComments.map((c) => c.id);
+
+      // 4. Obtener adjuntos vinculados a posts o comentarios o a la comunidad misma
+      const conditions = [
+        and(eq(attachments.targetType, "POST"), inArray(attachments.targetId, postIds)),
+      ];
+
+      if (commentIds.length > 0) {
+        conditions.push(
+          and(eq(attachments.targetType, "COMMENT"), inArray(attachments.targetId, commentIds))
+        );
+      }
+
+      conditions.push(
+        and(
+          or(eq(attachments.targetType, "COMMUNITY"), eq(attachments.targetType, "COMMUNITY_ASSET")),
+          eq(attachments.targetId, communityId)
+        )
+      );
+
+      const communityAttachments = await db.query.attachments.findMany({
+        columns: { fileKey: true },
+        where: or(...conditions),
+      });
+
+      for (const att of communityAttachments) {
+        if (att.fileKey && att.fileKey !== "external" && !att.fileKey.startsWith("http")) {
+          fileKeysToDelete.push(att.fileKey);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Error al recopilar adjuntos de la comunidad para R2:", err);
+  }
+
   try {
     await poolDb.transaction(async (tx) => {
       // 1. Soft delete la comunidad
@@ -626,6 +699,37 @@ export async function deleteCommunityAction(communityId: string) {
         }
       });
     });
+
+    // 3. Limpieza de R2
+    if (fileKeysToDelete.length > 0) {
+      const r2Result = await deleteR2Objects(fileKeysToDelete);
+      if (r2Result.success) {
+        await db.insert(auditLogs).values({
+          actorId: user.id,
+          action: "COMMUNITY_R2_CLEANUP_SUCCESS",
+          targetType: "COMMUNITY",
+          targetId: communityId,
+          description: `Limpieza de R2 exitosa para la comunidad "${community.displayName}". Se eliminaron ${fileKeysToDelete.length} archivos.`,
+          metadata: {
+            communityId,
+            deletedKeys: fileKeysToDelete
+          }
+        });
+      } else {
+        await db.insert(auditLogs).values({
+          actorId: user.id,
+          action: "COMMUNITY_R2_CLEANUP_FAILED",
+          targetType: "COMMUNITY",
+          targetId: communityId,
+          description: `Falló la limpieza de R2 para la comunidad "${community.displayName}". Error: ${r2Result.error}`,
+          metadata: {
+            communityId,
+            failedKeys: fileKeysToDelete,
+            error: r2Result.error
+          }
+        });
+      }
+    }
 
     revalidatePath("/app", "layout");
     revalidatePath("/app/explore");
