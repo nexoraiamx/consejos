@@ -34,9 +34,14 @@ interface NotificationItem {
   senderId: string | null;
   senderName: string;
   senderUsername: string;
+  senderAvatar?: string | null;
   targetTitle: string;
   content: string;
   communitySlug: string;
+  postId?: string;
+  commentId?: string;
+  href?: string;
+  attachmentSummary?: string | null;
 }
 
 interface NotificationsClientProps {
@@ -71,7 +76,6 @@ export default function NotificationsClient({ initialNotifications }: Notificati
         setNotifications((prev) =>
           prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
         );
-        // Refresh server layout/badge
         router.refresh();
       }
     } catch (err) {
@@ -106,6 +110,14 @@ export default function NotificationsClient({ initialNotifications }: Notificati
     }
   };
 
+  const handleNotificationClick = async (not: NotificationItem) => {
+    if (!not.isRead) {
+      await handleMarkAsRead(not.id);
+    }
+    const url = not.href || "/app";
+    router.push(url);
+  };
+
   const filteredNotifications = filter === "unread"
     ? notifications.filter((n) => !n.isRead)
     : notifications;
@@ -113,58 +125,78 @@ export default function NotificationsClient({ initialNotifications }: Notificati
   const hasUnread = notifications.some((n) => !n.isRead);
 
   const getIcon = (type: string, targetType: string) => {
+    if (type === "FOLLOW") {
+      return <UserPlus className="h-3 w-3 text-purple-400" />;
+    }
     if (type === "COMMENT") {
-      return <MessageSquare className="h-4 w-4 text-blue-400" />;
+      return <MessageSquare className="h-3 w-3 text-blue-400" />;
     }
     if (type === "REACTION") {
-      return <ArrowUp className="h-4 w-4 text-emerald-400" />;
+      return <ArrowUp className="h-3 w-3 text-emerald-400" />;
     }
     if (type === "INVITATION") {
-      return <UserPlus className="h-4 w-4 text-purple-400" />;
+      return <UserPlus className="h-3 w-3 text-purple-400" />;
     }
-    // Moderation/Suspension types
-    return <ShieldAlert className="h-4 w-4 text-red-400" />;
-  };
-
-  const getLinkUrl = (not: NotificationItem) => {
-    if (not.targetType === "COMMUNITY" && not.communitySlug) {
-      return `/app/r/${not.communitySlug}`;
-    }
-    if (not.communitySlug) {
-      // Find comment's post or direct post
-      const postId = not.targetType === "POST" ? not.targetId : "";
-      if (postId) {
-        return `/app/r/${not.communitySlug}/post/${postId}`;
-      }
-      // If comment, we link to the post detail as well
-      // The enriched targetId for comment replies might be the comment id.
-      // But in notifications page we can still navigate using post information if enriched.
-      // For now, let's link to the community page as fallback or post if we have the communitySlug.
-    }
-    return "/app";
+    return <ShieldAlert className="h-3 w-3 text-red-400" />;
   };
 
   const getNotificationText = (not: NotificationItem) => {
     const sender = not.senderName || "Sistema";
 
     switch (not.type) {
-      case "COMMENT":
-        if (not.targetType === "COMMENT") {
+      case "FOLLOW":
+        return (
+          <>
+            <span className="font-semibold text-white mr-1">{sender}</span>
+            empezó a seguirte
+          </>
+        );
+      case "COMMENT": {
+        const isReply = not.targetType === "COMMENT";
+        const hasText = !!not.content;
+        const hasAttach = !!not.attachmentSummary;
+
+        if (!hasText && hasAttach) {
+          const summary = not.attachmentSummary!;
+          let actionText = "";
+          if (summary === "audio" || summary === "video" || summary === "imagen") {
+            actionText = `${isReply ? "respondió" : "comentó"} con un ${summary}`;
+          } else if (summary === "PDF" || summary === "enlace") {
+            actionText = `compartió un ${summary}`;
+          } else {
+            actionText = `compartió un archivo`;
+          }
+
           return (
             <>
               <span className="font-semibold text-white mr-1">{sender}</span>
-              respondió a tu comentario en la publicación
+              {actionText} en la publicación
               <span className="font-semibold text-neutral-200 ml-1">"{not.targetTitle}"</span>
             </>
           );
         }
+
+        if (hasText && hasAttach) {
+          return (
+            <>
+              <span className="font-semibold text-white mr-1">{sender}</span>
+              {isReply ? "respondió a tu comentario" : "comentó en tu publicación"}
+              <span className="font-semibold text-neutral-200 mx-1">"{not.targetTitle}"</span>
+              <span className="text-neutral-500 text-[10px] font-medium bg-neutral-900 border border-neutral-850 px-1.5 py-0.5 rounded ml-1 whitespace-nowrap">
+                • adjuntó {not.attachmentSummary}
+              </span>
+            </>
+          );
+        }
+
         return (
           <>
             <span className="font-semibold text-white mr-1">{sender}</span>
-            comentó en tu publicación
+            {isReply ? "respondió a tu comentario en la publicación" : "comentó en tu publicación"}
             <span className="font-semibold text-neutral-200 ml-1">"{not.targetTitle}"</span>
           </>
         );
+      }
       case "REACTION":
         return (
           <>
@@ -181,9 +213,7 @@ export default function NotificationsClient({ initialNotifications }: Notificati
           </>
         );
       case "MODERATION":
-        // Check reported, hidden, or suspended
         if (not.targetId === SYSTEM_TARGET_ID) {
-          // Account status notification (dummy nil UUID)
           return (
             <>
               Tu estado de cuenta ha sido modificado por el equipo de administración.
@@ -192,9 +222,8 @@ export default function NotificationsClient({ initialNotifications }: Notificati
         }
         return (
           <>
-            Tu contenido en la publicación
-            <span className="font-semibold text-neutral-200 mx-1">"{not.targetTitle}"</span>
-            fue procesado por moderación.
+            Tu contenido fue ocultado por moderación en
+            <span className="font-semibold text-neutral-200 ml-1">"{not.targetTitle}"</span>
           </>
         );
       default:
@@ -276,7 +305,6 @@ export default function NotificationsClient({ initialNotifications }: Notificati
           ) : (
             <div className="flex flex-col gap-3">
               {filteredNotifications.map((not) => {
-                const linkUrl = getLinkUrl(not);
                 return (
                   <motion.div
                     key={not.id}
@@ -284,37 +312,42 @@ export default function NotificationsClient({ initialNotifications }: Notificati
                     initial={{ opacity: 0, y: 5 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95 }}
-                    className={`p-4 rounded-2xl border transition-all duration-300 flex gap-4 ${
+                    onClick={() => handleNotificationClick(not)}
+                    className={`p-4 rounded-2xl border transition-all duration-300 flex gap-4 cursor-pointer relative overflow-hidden group ${
                       not.isRead 
-                        ? "bg-neutral-950/10 border-neutral-900/60 hover:border-neutral-900" 
-                        : "bg-neutral-900/10 border-neutral-850 hover:border-neutral-800 shadow-sm shadow-blue-500/2"
+                        ? "bg-neutral-950/10 border-neutral-900/60 hover:border-neutral-800 hover:bg-neutral-900/5" 
+                        : "bg-neutral-900/10 border-neutral-850 hover:border-neutral-700 hover:bg-neutral-900/20 shadow-sm shadow-blue-500/2"
                     }`}
                   >
-                    {/* Icon */}
-                    <div className="h-8 w-8 rounded-lg bg-neutral-950 border border-neutral-900 flex items-center justify-center flex-shrink-0 mt-0.5 shadow-inner">
-                      {getIcon(not.type, not.targetType)}
+                    {/* Hover Glow decoration */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/2 to-blue-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+
+                    {/* Avatar with Icon Overlay */}
+                    <div className="relative h-9 w-9 flex-shrink-0 mt-0.5">
+                      {not.senderAvatar ? (
+                        <img 
+                          src={not.senderAvatar} 
+                          alt={not.senderName} 
+                          className="h-9 w-9 rounded-full object-cover border border-neutral-850"
+                        />
+                      ) : (
+                        <div className="h-9 w-9 rounded-full bg-neutral-950 border border-neutral-850 flex items-center justify-center text-xs font-semibold text-neutral-400">
+                          {not.senderName ? not.senderName.substring(0, 2).toUpperCase() : "SI"}
+                        </div>
+                      )}
+                      <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-neutral-950 border border-neutral-900 flex items-center justify-center shadow-md">
+                        {getIcon(not.type, not.targetType)}
+                      </div>
                     </div>
 
-                    {/* Text content & link */}
-                    <div className="flex-1 flex flex-col gap-1 text-left">
-                      <div className="text-xs font-light text-neutral-300">
-                        {linkUrl !== "/app" ? (
-                          <Link 
-                            href={linkUrl}
-                            onClick={() => {
-                              if (!not.isRead) handleMarkAsRead(not.id);
-                            }}
-                            className="hover:underline"
-                          >
-                            {getNotificationText(not)}
-                          </Link>
-                        ) : (
-                          getNotificationText(not)
-                        )}
+                    {/* Text content */}
+                    <div className="flex-1 flex flex-col gap-1 text-left min-w-0">
+                      <div className="text-xs font-light text-neutral-300 leading-snug">
+                        {getNotificationText(not)}
                       </div>
                       
                       {not.type === "COMMENT" && not.content && (
-                        <p className="text-xs text-neutral-400 font-light border-l-2 border-neutral-850 pl-3 py-1 my-1 italic leading-relaxed">
+                        <p className="text-xs text-neutral-400 font-light border-l-2 border-neutral-850 pl-3 py-1 my-1 italic leading-relaxed truncate max-w-lg">
                           "{not.content}"
                         </p>
                       )}
@@ -325,21 +358,27 @@ export default function NotificationsClient({ initialNotifications }: Notificati
                     </div>
 
                     {/* Quick actions (Check & Delete) */}
-                    <div className="flex items-center gap-1.5 self-center">
+                    <div className="flex items-center gap-1.5 self-center z-10">
                       {!not.isRead && (
                         <button
-                          onClick={() => handleMarkAsRead(not.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMarkAsRead(not.id);
+                          }}
                           title="Marcar como leída"
-                          className="p-1.5 rounded-lg border border-neutral-850 text-neutral-500 hover:text-emerald-400 hover:bg-neutral-900 transition-colors cursor-pointer"
+                          className="p-1.5 rounded-lg border border-neutral-850 text-neutral-500 hover:text-emerald-400 hover:bg-neutral-900 transition-colors cursor-pointer bg-neutral-950/20"
                         >
                           <Check className="h-3.5 w-3.5" />
                         </button>
                       )}
                       
                       <button
-                        onClick={() => handleDelete(not.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(not.id);
+                        }}
                         title="Eliminar notificación"
-                        className="p-1.5 rounded-lg border border-neutral-850 text-neutral-500 hover:text-red-400 hover:bg-neutral-900 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg border border-neutral-850 text-neutral-500 hover:text-red-400 hover:bg-neutral-900 transition-colors cursor-pointer bg-neutral-950/20"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>

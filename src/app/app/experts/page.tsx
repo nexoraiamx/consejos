@@ -1,14 +1,34 @@
 import React from "react";
 import { db } from "@/db";
-import { profiles, userReputation, reputationEvents } from "@/db/schema";
-import { eq, sql, desc } from "drizzle-orm";
+import { profiles, userReputation, reputationEvents, follows } from "@/db/schema";
+import { eq, sql, desc, and } from "drizzle-orm";
 import { ExpertsClient } from "./experts-client";
+import { getCurrentUser } from "@/lib/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
 export default async function ExpertsPage() {
+  const currentUser = await getCurrentUser();
+  const currentUserId = currentUser?.id || null;
+
+  // Obtener follows del usuario actual
+  const userFollows = currentUserId
+    ? await db.query.follows.findMany({
+        where: eq(follows.followerId, currentUserId)
+      })
+    : [];
+  const followedUserIds = new Set(userFollows.map((f) => f.followingId));
+
+  // Helper para añadir estado de follow
+  const injectFollowStatus = (list: any[]) => {
+    return list.map((item) => ({
+      ...item,
+      isFollowing: followedUserIds.has(item.userId),
+    }));
+  };
+
   // 1. Ranking Global (Histórico)
-  const globalRanking = await db
+  const globalRankingRaw = await db
     .select({
       userId: profiles.userId,
       displayName: profiles.displayName,
@@ -26,11 +46,13 @@ export default async function ExpertsPage() {
     .orderBy(desc(userReputation.score))
     .limit(50);
 
+  const globalRanking = injectFollowStatus(globalRankingRaw);
+
   // 2. Ranking Semanal (Últimos 7 días)
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-  const weeklyRanking = await db
+  const weeklyRankingRaw = await db
     .select({
       userId: profiles.userId,
       displayName: profiles.displayName,
@@ -59,11 +81,13 @@ export default async function ExpertsPage() {
     .orderBy(desc(sql`coalesce(sum(${reputationEvents.points}), 0)::int`))
     .limit(50);
 
+  const weeklyRanking = injectFollowStatus(weeklyRankingRaw);
+
   // 3. Ranking Mensual (Últimos 30 días)
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const monthlyRanking = await db
+  const monthlyRankingRaw = await db
     .select({
       userId: profiles.userId,
       displayName: profiles.displayName,
@@ -92,11 +116,14 @@ export default async function ExpertsPage() {
     .orderBy(desc(sql`coalesce(sum(${reputationEvents.points}), 0)::int`))
     .limit(50);
 
+  const monthlyRanking = injectFollowStatus(monthlyRankingRaw);
+
   return (
     <ExpertsClient
       globalRanking={globalRanking}
       weeklyRanking={weeklyRanking}
       monthlyRanking={monthlyRanking}
+      currentUserId={currentUserId}
     />
   );
 }

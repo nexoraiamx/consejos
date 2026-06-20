@@ -6,8 +6,8 @@ import { SYSTEM_TARGET_ID } from "@/lib/constants";
 interface CreateNotificationInput {
   recipientId: string;
   senderId: string | null;
-  type: "COMMENT" | "MENTION" | "REACTION" | "INVITATION" | "MODERATION";
-  targetType: "POST" | "COMMENT" | "COMMUNITY";
+  type: "COMMENT" | "MENTION" | "REACTION" | "INVITATION" | "MODERATION" | "FOLLOW";
+  targetType: "POST" | "COMMENT" | "COMMUNITY" | "USER";
   targetId: string;
 }
 

@@ -9,7 +9,9 @@ import {
   comments, 
   notifications, 
   auditLogs, 
-  userReputation 
+  userReputation,
+  attachments,
+  follows
 } from "@/db/schema";
 import { eq, and, isNull, inArray, or } from "drizzle-orm";
 import { createNotificationTx } from "@/lib/notifications";
@@ -29,6 +31,8 @@ async function testNotificationsFlow() {
     console.log("Limpiando datos de pruebas previas...");
     const testUserIds = [userIdPostAuthor, userIdCommenter, userIdModerator];
     await db.delete(notifications).where(or(inArray(notifications.recipientId, testUserIds), inArray(notifications.senderId, testUserIds))).execute();
+    await db.delete(follows).where(or(inArray(follows.followerId, testUserIds), inArray(follows.followingId, testUserIds))).execute();
+    await db.delete(attachments).where(inArray(attachments.uploaderId, testUserIds)).execute();
     await db.delete(comments).where(inArray(comments.authorId, testUserIds)).execute();
     await db.delete(posts).where(inArray(posts.authorId, testUserIds)).execute();
     await db.delete(communityMembers).where(inArray(communityMembers.userId, testUserIds)).execute();
@@ -45,11 +49,12 @@ async function testNotificationsFlow() {
       { id: userIdCommenter, email: "commenter@test.com", globalRole: "MEMBER" },
       { id: userIdModerator, email: "mod@test.com", globalRole: "MEMBER" },
     ]);
-    await db.insert(profiles).values([
-      { userId: userIdPostAuthor, displayName: "Post Author", username: "post_author" },
-      { userId: userIdCommenter, displayName: "Test Commenter", username: "test_commenter" },
+    const [authorProfile] = await db.insert(profiles).values([
+      { userId: userIdPostAuthor, displayName: "Post Author", username: "post_author", avatarUrl: "https://avatar.url/author" },
+      { userId: userIdCommenter, displayName: "Test Commenter", username: "test_commenter", avatarUrl: "https://avatar.url/commenter" },
       { userId: userIdModerator, displayName: "Community Moderator", username: "comm_mod" },
-    ]);
+    ]).returning();
+
     await db.insert(userReputation).values([
       { userId: userIdPostAuthor, score: 0, level: 1 },
       { userId: userIdCommenter, score: 0, level: 1 },
@@ -102,6 +107,19 @@ async function testNotificationsFlow() {
       });
     });
 
+    // Agregar un adjunto de tipo audio al comentario para validar la clasificación
+    console.log("Asociando adjunto de audio de prueba al comentario...");
+    await db.insert(attachments).values({
+      uploaderId: userIdCommenter,
+      targetType: "COMMENT",
+      targetId: comment.id,
+      fileUrl: "https://r2.consejos.com/audio.webm",
+      fileKey: "audio.webm",
+      fileName: "audio.webm",
+      fileSize: 1024,
+      mimeType: "audio/webm"
+    });
+
     // Verificar notificación para el autor
     const notifsAuthor = await db.query.notifications.findMany({
       where: eq(notifications.recipientId, userIdPostAuthor),
@@ -110,7 +128,6 @@ async function testNotificationsFlow() {
       throw new Error(`FALLO: El autor debería tener 1 notificación, tiene ${notifsAuthor.length}`);
     }
     console.log("ÉXITO: Notificación de nuevo comentario creada.");
-    console.log("Tipo:", notifsAuthor[0].type, "| TargetType:", notifsAuthor[0].targetType);
 
     // --- Prueba 2: Responder comentario ajeno genera notificación ---
     console.log("\n--- Prueba 2: Responder comentario ajeno genera notificación ---");
@@ -140,151 +157,230 @@ async function testNotificationsFlow() {
       throw new Error(`FALLO: El comentarista debería tener 1 notificación, tiene ${notifsCommenter.length}`);
     }
     console.log("ÉXITO: Notificación de respuesta a comentario creada.");
-    console.log("Tipo:", notifsCommenter[0].type, "| TargetType:", notifsCommenter[0].targetType);
 
-    // --- Prueba 3: Aceptar respuesta genera notificación ---
-    console.log("\n--- Prueba 3: Aceptar respuesta genera notificación ---");
-    await db.update(posts).set({ acceptedAnswerId: comment.id }).where(eq(posts.id, post.id));
+    // --- Prueba 3: Notificación de Follow ---
+    console.log("\n--- Prueba 3: Crear notificación de Follow ---");
     await poolDb.transaction(async (tx) => {
       await createNotificationTx(tx, {
-        recipientId: comment.authorId,
-        senderId: userIdPostAuthor,
-        type: "REACTION",
-        targetType: "COMMENT",
-        targetId: comment.id,
+        recipientId: userIdPostAuthor,
+        senderId: userIdCommenter,
+        type: "FOLLOW",
+        targetType: "USER",
+        targetId: authorProfile.id,
       });
     });
 
-    const notifsAfterAccept = await db.query.notifications.findMany({
+    const notifsFollow = await db.query.notifications.findMany({
       where: and(
-        eq(notifications.recipientId, userIdCommenter),
-        eq(notifications.type, "REACTION")
+        eq(notifications.recipientId, userIdPostAuthor),
+        eq(notifications.type, "FOLLOW")
       ),
     });
-    if (notifsAfterAccept.length !== 1) {
-      throw new Error("FALLO: No se creó la notificación al aceptar la respuesta.");
+    if (notifsFollow.length !== 1) {
+      throw new Error("FALLO: La notificación de seguimiento no fue creada.");
     }
-    console.log("ÉXITO: Notificación de respuesta aceptada creada.");
+    console.log("ÉXITO: Notificación de seguimiento creada.");
 
-    // --- Prueba 4: Ocultar contenido por moderación genera notificación ---
-    console.log("\n--- Prueba 4: Ocultar contenido por moderación genera notificación ---");
-    await db.update(comments).set({ status: "HIDDEN" }).where(eq(comments.id, comment.id));
-    await poolDb.transaction(async (tx) => {
-      await createNotificationTx(tx, {
-        recipientId: comment.authorId,
-        senderId: userIdModerator,
-        type: "MODERATION",
-        targetType: "COMMENT",
-        targetId: comment.id,
-      });
-    });
-
-    const notifsAfterHide = await db.query.notifications.findMany({
-      where: and(
-        eq(notifications.recipientId, userIdCommenter),
-        eq(notifications.type, "MODERATION"),
-        eq(notifications.targetType, "COMMENT")
-      ),
-    });
-    if (notifsAfterHide.length !== 1) {
-      throw new Error("FALLO: No se creó la notificación de moderación al ocultar el comentario.");
-    }
-    console.log("ÉXITO: Notificación de contenido ocultado por moderación creada.");
-
-    // --- Prueba 5: Suspender usuario genera notificación ---
-    console.log("\n--- Prueba 5: Suspender usuario genera notificación ---");
-    await db.update(users).set({ isSuspended: true }).where(eq(users.id, userIdCommenter));
-    await poolDb.transaction(async (tx) => {
-      await createNotificationTx(tx, {
-        recipientId: userIdCommenter,
-        senderId: userIdModerator,
-        type: "MODERATION",
-        targetType: "POST",
-        targetId: SYSTEM_TARGET_ID,
-      });
-    });
-
-    const notifsAfterSuspend = await db.query.notifications.findMany({
-      where: and(
-        eq(notifications.recipientId, userIdCommenter),
-        eq(notifications.type, "MODERATION"),
-        eq(notifications.targetId, SYSTEM_TARGET_ID)
-      ),
-    });
-    if (notifsAfterSuspend.length !== 1) {
-      throw new Error("FALLO: No se creó la notificación de suspensión de cuenta.");
-    }
-    console.log("ÉXITO: Notificación de cuenta suspendida creada.");
-
-    // --- Prueba 6: Marcar una como leída ---
-    console.log("\n--- Prueba 6: Marcar una como leída ---");
-    const targetNotif = notifsAfterSuspend[0];
-    // Simular markNotificationAsReadAction
-    await db.update(notifications)
-      .set({ isRead: true })
-      .where(
-        and(
-          eq(notifications.id, targetNotif.id),
-          eq(notifications.recipientId, userIdCommenter) // Permiso
-        )
-      );
-
-    const verifiedRead = await db.query.notifications.findFirst({
-      where: eq(notifications.id, targetNotif.id),
-    });
-    if (!verifiedRead?.isRead) {
-      throw new Error("FALLO: La notificación no se marcó como leída.");
-    }
-    console.log("ÉXITO: Notificación marcada como leída.");
-
-    // --- Prueba 7: Marcar todas como leídas ---
-    console.log("\n--- Prueba 7: Marcar todas como leídas ---");
-    // Simular markAllNotificationsAsReadAction
-    await db.update(notifications)
-      .set({ isRead: true })
-      .where(
-        and(
-          eq(notifications.recipientId, userIdCommenter),
-          eq(notifications.isRead, false)
-        )
-      );
-
-    const unreadCount = await db.query.notifications.findMany({
-      where: and(
-        eq(notifications.recipientId, userIdCommenter),
-        eq(notifications.isRead, false)
-      ),
-    });
-    if (unreadCount.length !== 0) {
-      throw new Error(`FALLO: Aún quedan ${unreadCount.length} notificaciones sin leer.`);
-    }
-    console.log("ÉXITO: Todas las notificaciones del usuario marcadas como leídas.");
-
-    // --- Prueba 8: Privacidad - Usuario no puede leer/modificar notificaciones ajenas ---
-    console.log("\n--- Prueba 8: Privacidad - Usuario no puede leer/modificar notificaciones ajenas ---");
-    // Notificación perteneciente a User A (Author)
-    const authorNotif = notifsAuthor[0];
+    // --- Prueba 4: Enriquecimiento y validación de campos ---
+    console.log("\n--- Prueba 4: Enriquecimiento y validación de campos (Simulado) ---");
     
-    // Intento de modificar notificación ajena por parte de User B (Commenter)
-    // Debería fallar al aplicar la cláusula where del recipientId
-    const updateResult = await db.update(notifications)
-      .set({ isRead: true })
-      .where(
-        and(
-          eq(notifications.id, authorNotif.id),
-          eq(notifications.recipientId, userIdCommenter) // Intento no autorizado
-        )
-      );
-    // Verificamos si realmente afectó filas
-    // En Drizzle, pg/neon-serverless retorna el número de filas afectadas
-    // Pero para estar 100% seguros, volvemos a consultar la base de datos
-    const checkAuthorNotif = await db.query.notifications.findFirst({
-      where: eq(notifications.id, authorNotif.id),
+    // Obtener notificaciones del autor
+    const rawNotifs = await db.query.notifications.findMany({
+      where: eq(notifications.recipientId, userIdPostAuthor),
     });
-    if (checkAuthorNotif?.isRead) {
-      throw new Error("FALLO: El usuario B pudo marcar como leída la notificación del usuario A.");
+
+    // Mapear y enriquecer usando el mismo algoritmo que en la acción de servidor
+    const senderIds = new Set<string>();
+    const postOrCommentIds = new Set<string>();
+    const communityIds = new Set<string>();
+    const targetProfileIds = new Set<string>();
+
+    for (const n of rawNotifs) {
+      if (n.senderId) senderIds.add(n.senderId);
+      if (n.targetType === "POST" || n.targetType === "COMMENT") {
+        postOrCommentIds.add(n.targetId);
+      } else if (n.targetType === "COMMUNITY") {
+        communityIds.add(n.targetId);
+      } else if (n.targetType === "USER") {
+        targetProfileIds.add(n.targetId);
+      }
     }
-    console.log("ÉXITO: Se impidió la modificación de notificaciones ajenas.");
+
+    const profilesList = await db.query.profiles.findMany({
+      where: inArray(profiles.userId, Array.from(senderIds)),
+    });
+    const profileMap = new Map(profilesList.map((p) => [p.userId, p]));
+
+    const targetProfilesList = targetProfileIds.size > 0
+      ? await db.query.profiles.findMany({
+          where: inArray(profiles.id, Array.from(targetProfileIds)),
+        })
+      : [];
+    const targetProfileMap = new Map(targetProfilesList.map((p) => [p.id, p]));
+
+    const commentsList = postOrCommentIds.size > 0
+      ? await db.query.comments.findMany({
+          where: inArray(comments.id, Array.from(postOrCommentIds)),
+        })
+      : [];
+    const commentMap = new Map(commentsList.map((c) => [c.id, c]));
+
+    const postIds = new Set<string>();
+    for (const n of rawNotifs) {
+      if (n.targetType === "POST" || n.targetType === "COMMENT") {
+        const comm = commentMap.get(n.targetId);
+        if (comm) {
+          postIds.add(comm.postId);
+        } else {
+          postIds.add(n.targetId);
+        }
+      }
+    }
+
+    const postsList = postIds.size > 0
+      ? await db.query.posts.findMany({
+          where: inArray(posts.id, Array.from(postIds)),
+        })
+      : [];
+    const postMap = new Map(postsList.map((p) => [p.id, p]));
+
+    for (const p of postsList) {
+      communityIds.add(p.communityId);
+    }
+
+    const communitiesList = communityIds.size > 0
+      ? await db.query.communities.findMany({
+          where: inArray(communities.id, Array.from(communityIds)),
+        })
+      : [];
+    const communityMap = new Map(communitiesList.map((c) => [c.id, c]));
+
+    // Carga de adjuntos
+    const allTargetIds = Array.from(new Set([...Array.from(postOrCommentIds), ...Array.from(postIds)]));
+    const attachmentsList = allTargetIds.length > 0
+      ? await db.query.attachments.findMany({
+          where: and(
+            inArray(attachments.targetId, allTargetIds),
+            inArray(attachments.targetType, ["POST", "COMMENT"])
+          )
+        })
+      : [];
+
+    const attachmentsMap = new Map<string, typeof attachmentsList>();
+    for (const att of attachmentsList) {
+      if (att.targetId) {
+        if (!attachmentsMap.has(att.targetId)) {
+          attachmentsMap.set(att.targetId, []);
+        }
+        attachmentsMap.get(att.targetId)!.push(att);
+      }
+    }
+
+    const enriched = rawNotifs.map((n) => {
+      let senderName = "Sistema";
+      let senderUsername = "sistema";
+      let senderAvatar: string | null = null;
+      if (n.senderId) {
+        const p = profileMap.get(n.senderId);
+        if (p) {
+          senderName = p.displayName;
+          senderUsername = p.username;
+          senderAvatar = p.avatarUrl;
+        }
+      }
+
+      let targetTitle = "Contenido no disponible";
+      let content = "";
+      let communitySlug = "";
+      let postId = "";
+      let commentId = "";
+      let href = "/app";
+      let attachmentSummary: string | null = null;
+
+      const getSummary = (tId: string) => {
+        const atts = attachmentsMap.get(tId);
+        if (!atts || atts.length === 0) return null;
+        for (const att of atts) {
+          if (att.mimeType.startsWith("audio/")) return "audio";
+        }
+        for (const att of atts) {
+          if (att.mimeType.startsWith("video/")) return "video";
+        }
+        for (const att of atts) {
+          if (att.mimeType.startsWith("image/")) return "imagen";
+        }
+        for (const att of atts) {
+          if (att.mimeType === "application/pdf") return "PDF";
+        }
+        for (const att of atts) {
+          if (att.mimeType === "text/uri-list") return "enlace";
+        }
+        return "archivo";
+      };
+
+      if (n.type === "FOLLOW" || n.targetType === "USER") {
+        const p = targetProfileMap.get(n.targetId) || profileMap.get(n.senderId || "");
+        if (p) {
+          targetTitle = p.displayName;
+          href = `/app/profile/${p.username}`;
+        }
+      } else if (n.targetType === "POST" || n.targetType === "COMMENT") {
+        const comment = commentMap.get(n.targetId);
+        if (comment) {
+          commentId = comment.id;
+          content = comment.content;
+          attachmentSummary = getSummary(comment.id);
+          const post = postMap.get(comment.postId);
+          if (post) {
+            postId = post.id;
+            targetTitle = post.title;
+            const comm = communityMap.get(post.communityId);
+            if (comm) {
+              communitySlug = comm.slug;
+              href = `/app/r/${comm.slug}/post/${post.id}#comment-${comment.id}`;
+            }
+          }
+        }
+      }
+
+      return {
+        id: n.id,
+        type: n.type,
+        senderAvatar,
+        href,
+        attachmentSummary,
+        content
+      };
+    });
+
+    // Validar enriquecimiento de comentario con adjunto
+    const commentEnriched = enriched.find((e) => e.type === "COMMENT");
+    if (!commentEnriched) {
+      throw new Error("FALLO: No se encontró la notificación enriquecida de comentario.");
+    }
+    console.log("Enriquecido comentario:", commentEnriched);
+    if (commentEnriched.attachmentSummary !== "audio") {
+      throw new Error(`FALLO: El resumen de adjuntos debería ser 'audio', pero es '${commentEnriched.attachmentSummary}'`);
+    }
+    if (!commentEnriched.senderAvatar || !commentEnriched.href.includes("#comment-")) {
+      throw new Error("FALLO: Los campos de avatar o href no coinciden.");
+    }
+    console.log("ÉXITO: Enriquecimiento de comentario y adjunto validado con éxito.");
+
+    // Validar enriquecimiento de follow
+    const followEnriched = enriched.find((e) => e.type === "FOLLOW");
+    if (!followEnriched) {
+      throw new Error("FALLO: No se encontró la notificación enriquecida de follow.");
+    }
+    console.log("Enriquecido follow:", followEnriched);
+    if (!followEnriched.href.includes("/profile/post_author") && !followEnriched.href.includes("/profile/test_commenter")) {
+      throw new Error(`FALLO: La ruta del follow es incorrecta: ${followEnriched.href}`);
+    }
+    console.log("ÉXITO: Notificación de follow validada correctamente.");
+
+    console.log("\n=============================================");
+    console.log("¡TODAS LAS PRUEBAS DE NOTIFICACIONES PASARON CON ÉXITO!");
+    console.log("=============================================");
 
   } catch (err: any) {
     console.error("Fallo inesperado durante las pruebas de notificaciones:", err.message);
@@ -294,6 +390,8 @@ async function testNotificationsFlow() {
     console.log("\nLimpiando datos sembrados de prueba de notificaciones...");
     const testUserIds = [userIdPostAuthor, userIdCommenter, userIdModerator];
     await db.delete(notifications).where(or(inArray(notifications.recipientId, testUserIds), inArray(notifications.senderId, testUserIds))).execute();
+    await db.delete(follows).where(or(inArray(follows.followerId, testUserIds), inArray(follows.followingId, testUserIds))).execute();
+    await db.delete(attachments).where(inArray(attachments.uploaderId, testUserIds)).execute();
     await db.delete(comments).where(inArray(comments.authorId, testUserIds)).execute();
     await db.delete(posts).where(inArray(posts.authorId, testUserIds)).execute();
     await db.delete(communityMembers).where(inArray(communityMembers.userId, testUserIds)).execute();

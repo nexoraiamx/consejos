@@ -403,4 +403,25 @@ export const userBadges = pgTable(
   })
 );
 
+// 19. FOLLOWS TABLE
+export const follows = pgTable(
+  "follows",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    followerId: varchar("follower_id", { length: 256 })
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    followingId: varchar("following_id", { length: 256 })
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    followsUniqueIdx: unique("follows_unique_idx").on(table.followerId, table.followingId),
+    followsFollowerIdx: index("follows_follower_idx").on(table.followerId),
+    followsFollowingIdx: index("follows_following_idx").on(table.followingId),
+  })
+);
+
+
 

@@ -1,6 +1,6 @@
 import React, { Suspense } from "react";
 import { db } from "@/db";
-import { posts, communities, communityMembers, profiles, userReputation, attachments, comments, joinRequests, users } from "@/db/schema";
+import { posts, communities, communityMembers, profiles, userReputation, attachments, comments, joinRequests, users, follows } from "@/db/schema";
 import { eq, and, isNull, sql, desc, inArray, or } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { PostCard } from "@/components/shared/post-card";
@@ -101,30 +101,13 @@ export default async function AppDashboard() {
 
 // 1. Componente Asíncrono para el Feed de Publicaciones
 async function FeedSection({ currentUserId }: { currentUserId: string }) {
-  let dbPosts: {
-    id: string;
-    title: string;
-    content: string;
-    postType: string;
-    category: string | null;
-    tags: string[];
-    status: string;
-    createdAt: Date;
-    authorId: string;
-    authorName: string | null;
-    authorAvatar: string | null;
-    authorReputation: number | null;
-    authorUsername: string | null;
-    communitySlug: string;
-    communityName: string;
-    commentsCount: number;
-  }[] = [];
+  let dbPosts: any[] = [];
 
   try {
-    const isGlobalAdmin = false; // Se gestionará simplificado o con roles
-    
-    // Consultar rol global del usuario
     let isUserAdmin = false;
+    let followedUserIds = new Set<string>();
+    let userInterests: string[] = [];
+
     if (currentUserId) {
       const userObj = await db.query.users.findFirst({
         where: eq(users.id, currentUserId)
@@ -132,6 +115,17 @@ async function FeedSection({ currentUserId }: { currentUserId: string }) {
       if (userObj?.globalRole === "GLOBAL_ADMIN") {
         isUserAdmin = true;
       }
+
+      // Obtener seguidos e intereses
+      const userFollows = await db.query.follows.findMany({
+        where: eq(follows.followerId, currentUserId),
+      });
+      followedUserIds = new Set(userFollows.map((f) => f.followingId));
+
+      const userProfile = await db.query.profiles.findFirst({
+        where: eq(profiles.userId, currentUserId),
+      });
+      userInterests = userProfile?.interests || [];
     }
 
     const whereClause = isUserAdmin
@@ -190,7 +184,7 @@ async function FeedSection({ currentUserId }: { currentUserId: string }) {
           )
         );
 
-    dbPosts = await db
+    const rawPosts = await db
       .select({
         id: posts.id,
         title: posts.title,
@@ -207,6 +201,9 @@ async function FeedSection({ currentUserId }: { currentUserId: string }) {
         authorUsername: profiles.username,
         communitySlug: communities.slug,
         communityName: communities.displayName,
+        memberStatus: communityMembers.status,
+        communityPrivacy: communities.privacyType,
+        communityCategory: communities.category,
         commentsCount: sql<number>`(SELECT count(*)::int FROM ${comments} WHERE ${comments.postId} = ${posts.id} AND ${comments.deletedAt} IS NULL AND ${comments.status} = 'ACTIVE')`,
       })
       .from(posts)
@@ -222,7 +219,51 @@ async function FeedSection({ currentUserId }: { currentUserId: string }) {
       )
       .where(whereClause)
       .orderBy(desc(posts.createdAt))
-      .limit(20);
+      .limit(100);
+
+    // Priorizar en memoria
+    if (currentUserId && rawPosts.length > 0) {
+      const getPostScore = (post: any) => {
+        let score = 0;
+        
+        // 1. Miembro aprobado de la comunidad
+        const isApprovedMember = post.memberStatus?.toUpperCase() === "APPROVED";
+        if (isApprovedMember) {
+          score += 1000;
+        }
+        
+        // 2. Autor seguido por el usuario actual
+        const isAuthorFollowed = followedUserIds.has(post.authorId);
+        if (isAuthorFollowed) {
+          score += 500;
+        }
+        
+        // 3. Coincidencia de intereses (solo para comunidades públicas)
+        const isPublic = post.communityPrivacy === "PUBLIC";
+        if (isPublic && userInterests.length > 0) {
+          const categoryMatch = post.communityCategory && userInterests.some(
+            (interest) => interest.toLowerCase() === post.communityCategory.toLowerCase()
+          );
+          const tagsMatch = post.tags && post.tags.some(
+            (tag: string) => userInterests.some((interest) => interest.toLowerCase() === tag.toLowerCase())
+          );
+          if (categoryMatch || tagsMatch) {
+            score += 200;
+          }
+        }
+        
+        // 4. Peso de recencia (frescura del post en las últimas horas)
+        const ageInHours = (Date.now() - new Date(post.createdAt).getTime()) / (1000 * 60 * 60);
+        const recencyScore = Math.max(0, 100 - ageInHours);
+        score += recencyScore;
+        
+        return score;
+      };
+
+      rawPosts.sort((a, b) => getPostScore(b) - getPostScore(a));
+    }
+
+    dbPosts = rawPosts.slice(0, 20);
   } catch (error) {
     console.error("Error al consultar posts para el Dashboard:", error);
   }

@@ -1,6 +1,6 @@
 import React from "react";
 import { db } from "@/db";
-import { profiles, userReputation, userBadges, posts, comments, communities, communityMembers, attachments } from "@/db/schema";
+import { profiles, userReputation, userBadges, posts, comments, communities, communityMembers, attachments, follows } from "@/db/schema";
 import { eq, and, isNull, sql, desc, inArray, or } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { notFound } from "next/navigation";
@@ -96,6 +96,27 @@ export default async function PublicProfilePage({ params }: PageProps) {
     );
   const managedCommunitiesCount = managedRes?.count || 0;
 
+  // 3.5. Obtener estadísticas de follows
+  const followersList = await db.query.follows.findMany({
+    where: eq(follows.followingId, targetProfile.userId),
+  });
+  const followingList = await db.query.follows.findMany({
+    where: eq(follows.followerId, targetProfile.userId),
+  });
+
+  const currentUser = await getCurrentUser();
+  const currentUserId = currentUser?.id || null;
+  let isFollowing = false;
+  if (currentUserId) {
+    const match = await db.query.follows.findFirst({
+      where: and(
+        eq(follows.followerId, currentUserId),
+        eq(follows.followingId, targetProfile.userId)
+      ),
+    });
+    isFollowing = !!match;
+  }
+
   // 4. Obtener insignias otorgadas al usuario
   const dbBadges = await db.query.userBadges.findMany({
     where: eq(userBadges.userId, targetProfile.userId),
@@ -171,11 +192,10 @@ export default async function PublicProfilePage({ params }: PageProps) {
       })),
   }));
 
-  const currentUser = await getCurrentUser();
-
   return (
     <ProfileClient
       profile={{
+        userId: targetProfile.userId,
         displayName: targetProfile.displayName,
         username: targetProfile.username,
         avatarUrl: targetProfile.avatarUrl || undefined,
@@ -200,6 +220,9 @@ export default async function PublicProfilePage({ params }: PageProps) {
       badges={badges}
       postsList={formattedPosts}
       currentUserId={currentUser?.id}
+      followersCountInitial={followersList.length}
+      followingCountInitial={followingList.length}
+      isFollowingInitial={isFollowing}
     />
   );
 }

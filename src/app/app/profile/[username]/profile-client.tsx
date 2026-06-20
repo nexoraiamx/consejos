@@ -12,7 +12,9 @@ import {
   Sparkles, 
   Shield, 
   Inbox,
-  Globe
+  Globe,
+  Check,
+  UserPlus
 } from "lucide-react";
 
 const GithubIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -29,6 +31,7 @@ const TwitterIcon = (props: React.SVGProps<SVGSVGElement>) => (
 );
 import { PostCard, PostCardProps } from "@/components/shared/post-card";
 import { getUserLevel, getLevelBadge, getLevelColor } from "@/lib/reputation-rules";
+import { followUserAction, unfollowUserAction } from "@/app/actions/follows";
 
 interface BadgeItem {
   id: string;
@@ -40,6 +43,7 @@ interface BadgeItem {
 
 interface ProfileClientProps {
   profile: {
+    userId: string;
     displayName: string;
     username: string;
     avatarUrl?: string;
@@ -67,6 +71,9 @@ interface ProfileClientProps {
   badges: BadgeItem[];
   postsList: any[];
   currentUserId?: string;
+  followersCountInitial: number;
+  followingCountInitial: number;
+  isFollowingInitial: boolean;
 }
 
 const BADGE_DETAILS: Record<string, { description: string }> = {
@@ -87,9 +94,39 @@ export function ProfileClient({
   stats,
   badges,
   postsList,
-  currentUserId
+  currentUserId,
+  followersCountInitial,
+  followingCountInitial,
+  isFollowingInitial,
 }: ProfileClientProps) {
   const [activeTab, setActiveTab] = useState<"posts" | "badges">("posts");
+  const [isFollowing, setIsFollowing] = useState(isFollowingInitial);
+  const [followersCount, setFollowersCount] = useState(followersCountInitial);
+  const [isPending, setIsPending] = useState(false);
+
+  const handleFollowToggle = async () => {
+    if (isPending) return;
+    setIsPending(true);
+    try {
+      if (isFollowing) {
+        const res = await unfollowUserAction(profile.userId);
+        if (res.success) {
+          setIsFollowing(false);
+          setFollowersCount((prev) => Math.max(0, prev - 1));
+        }
+      } else {
+        const res = await followUserAction(profile.userId);
+        if (res.success) {
+          setIsFollowing(true);
+          setFollowersCount((prev) => prev + 1);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsPending(false);
+    }
+  };
 
   const formattedDate = new Date(profile.createdAt).toLocaleDateString("es-ES", {
     year: "numeric",
@@ -120,21 +157,50 @@ export function ProfileClient({
         </div>
 
         {/* Info */}
-        <div className="flex-1 min-w-0 z-10 flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-heading font-semibold text-white tracking-tight">
-              {profile.displayName}
-            </h1>
-            <span className="text-xs text-neutral-500 font-mono">@{profile.username}</span>
+        <div className="flex-1 min-w-0 z-10 flex flex-col gap-2 w-full">
+          <div className="flex items-center justify-between w-full gap-4 flex-wrap sm:flex-nowrap">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-heading font-semibold text-white tracking-tight">
+                {profile.displayName}
+              </h1>
+              <span className="text-xs text-neutral-500 font-mono">@{profile.username}</span>
 
-            {profile.isExpert && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-blue-950/40 border border-blue-900/60 px-2.5 py-0.5 text-[9px] font-semibold text-blue-400">
-                <Sparkles className="h-2.5 w-2.5" /> Experto verificado
-              </span>
+              {profile.isExpert && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-blue-950/40 border border-blue-900/60 px-2.5 py-0.5 text-[9px] font-semibold text-blue-400">
+                  <Sparkles className="h-2.5 w-2.5" /> Experto verificado
+                </span>
+              )}
+            </div>
+
+            {/* Follow/Unfollow Button */}
+            {currentUserId && currentUserId !== profile.userId && (
+              <button
+                onClick={handleFollowToggle}
+                disabled={isPending}
+                className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 self-start sm:self-center shrink-0 ${
+                  isFollowing
+                    ? "bg-neutral-900 border border-neutral-800 text-neutral-300 hover:bg-red-950/20 hover:border-red-900/40 hover:text-red-400"
+                    : "bg-white text-neutral-950 hover:bg-neutral-200"
+                }`}
+              >
+                {isPending ? (
+                  <span className="h-3 w-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : isFollowing ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" />
+                    <span>Siguiendo</span>
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="h-3.5 w-3.5" />
+                    <span>Seguir</span>
+                  </>
+                )}
+              </button>
             )}
           </div>
 
-          {/* Level Badges */}
+          {/* Level Badges & Follower Counts */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-neutral-400 mt-0.5 font-light">
             <span className={`inline-flex items-center gap-0.5 font-medium ${getLevelColor(reputation.score)}`}>
               <span>{getLevelBadge(reputation.score)}</span>
@@ -142,6 +208,12 @@ export function ProfileClient({
             </span>
             <span className="text-neutral-800 select-none">&bull;</span>
             <span className="font-mono text-neutral-300 font-medium">{reputation.score.toLocaleString()} pts</span>
+            
+            <span className="text-neutral-800 select-none">&bull;</span>
+            <span className="text-neutral-300"><span className="font-semibold text-white">{followersCount}</span> seguidores</span>
+            <span className="text-neutral-800 select-none">&bull;</span>
+            <span className="text-neutral-300"><span className="font-semibold text-white">{followingCountInitial}</span> siguiendo</span>
+
             <span className="text-neutral-800 select-none">&bull;</span>
             <span className="inline-flex items-center gap-1 text-[11px] text-neutral-500">
               <Calendar className="h-3.5 w-3.5" /> Miembro desde {formattedDate}

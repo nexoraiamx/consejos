@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   ArrowBigUp, 
   ArrowBigDown, 
@@ -82,6 +82,24 @@ export function CommentCard({
   const [editText, setEditText] = useState(content);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [isHighlighted, setIsHighlighted] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash === `#comment-${id}`) {
+      setIsHighlighted(true);
+      const el = document.getElementById(`comment-${id}`);
+      if (el) {
+        // Wait briefly for page rendering to complete before scrolling
+        setTimeout(() => {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 100);
+      }
+      const timer = setTimeout(() => {
+        setIsHighlighted(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [id]);
 
   const isAuthor = currentUserId === authorId;
   const isHidden = status === "HIDDEN";
@@ -146,15 +164,18 @@ export function CommentCard({
 
   return (
     <motion.div
+      id={`comment-${id}`}
       initial={{ opacity: 0, y: 5 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }}
-      className={`flex flex-col gap-2.5 py-4 border-l border-neutral-900 pl-4 md:pl-6 ml-2 md:ml-4 text-left transition-all duration-350 ${
-        isAccepted 
+      className={`flex flex-col gap-2.5 py-4 border-l pl-4 md:pl-6 ml-2 md:ml-4 text-left transition-all duration-500 ${
+        isHighlighted
+          ? "border-blue-500 bg-blue-950/10 rounded-r-2xl pr-4 shadow-[0_0_15px_rgba(59,130,246,0.1)] scale-[1.01]"
+          : isAccepted 
           ? "border-emerald-500/50 bg-emerald-950/5 rounded-r-2xl pr-4" 
           : isHidden 
           ? "border-red-950/40 bg-red-950/5 rounded-r-2xl pr-4" 
-          : ""
+          : "border-neutral-900"
       }`}
     >
       {/* Header Info */}

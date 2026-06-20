@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { Award, Sparkles, User, Inbox, Flame, TrendingUp, Filter } from "lucide-react";
+import { Award, Sparkles, User, Inbox, Flame, TrendingUp, Filter, Check, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { getUserLevel, getLevelBadge, getLevelColor } from "@/lib/reputation-rules";
+import { followUserAction, unfollowUserAction } from "@/app/actions/follows";
 
 interface ExpertData {
   userId: string;
@@ -15,12 +16,14 @@ interface ExpertData {
   level: number | null;
   interests: string[];
   isExpert: boolean;
+  isFollowing?: boolean;
 }
 
 interface ExpertsClientProps {
   globalRanking: ExpertData[];
   weeklyRanking: ExpertData[];
   monthlyRanking: ExpertData[];
+  currentUserId?: string | null;
 }
 
 const INTERESTS = [
@@ -36,10 +39,47 @@ const INTERESTS = [
 export function ExpertsClient({
   globalRanking,
   weeklyRanking,
-  monthlyRanking
+  monthlyRanking,
+  currentUserId
 }: ExpertsClientProps) {
   const [timeframe, setTimeframe] = useState<"global" | "weekly" | "monthly">("global");
   const [selectedInterest, setSelectedInterest] = useState<string>("all");
+
+  const [followedIds, setFollowedIds] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    const processItem = (e: ExpertData) => {
+      if (e.isFollowing) initial[e.userId] = true;
+    };
+    globalRanking.forEach(processItem);
+    weeklyRanking.forEach(processItem);
+    monthlyRanking.forEach(processItem);
+    return initial;
+  });
+
+  const [pendingIds, setPendingIds] = useState<Record<string, boolean>>({});
+
+  const handleFollowToggle = async (userId: string) => {
+    if (pendingIds[userId]) return;
+    setPendingIds((prev) => ({ ...prev, [userId]: true }));
+    const isCurrentlyFollowing = !!followedIds[userId];
+    try {
+      if (isCurrentlyFollowing) {
+        const res = await unfollowUserAction(userId);
+        if (res.success) {
+          setFollowedIds((prev) => ({ ...prev, [userId]: false }));
+        }
+      } else {
+        const res = await followUserAction(userId);
+        if (res.success) {
+          setFollowedIds((prev) => ({ ...prev, [userId]: true }));
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setPendingIds((prev) => ({ ...prev, [userId]: false }));
+    }
+  };
 
   // Obtener ranking actual según la pestaña
   const currentRanking = 
@@ -175,13 +215,11 @@ export function ExpertsClient({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
               {/* Renderizar en orden: 2do Lugar (Izquierda), 1er Lugar (Centro), 3er Lugar (Derecha) en desktop */}
               {(() => {
-                // Ordenar para el visual: 2, 1, 3 si existen
                 const order = [];
                 if (podium[1]) order.push({ data: podium[1], index: 1 });
                 if (podium[0]) order.push({ data: podium[0], index: 0 });
                 if (podium[2]) order.push({ data: podium[2], index: 2 });
                 
-                // Si no hay por lo menos 3, renderizar tal cual
                 const itemsToRender = mdMatches() ? order : podium.map((p, idx) => ({ data: p, index: idx }));
 
                 return itemsToRender.map(({ data, index }) => {
@@ -249,6 +287,33 @@ export function ExpertsClient({
                           <span className="text-[9px] text-neutral-500">{pointsLabel}</span>
                         </div>
                       </div>
+
+                      {/* Follow/Unfollow Button */}
+                      {currentUserId && currentUserId !== data.userId && (
+                        <button
+                          onClick={() => handleFollowToggle(data.userId)}
+                          disabled={pendingIds[data.userId]}
+                          className={`px-3 py-1 rounded-full text-[10px] font-semibold transition-all cursor-pointer flex items-center gap-1 ${
+                            followedIds[data.userId]
+                              ? "bg-neutral-900 border border-neutral-800 text-neutral-300 hover:bg-red-950/20 hover:border-red-900/40 hover:text-red-400"
+                              : "bg-white text-neutral-950 hover:bg-neutral-200"
+                          }`}
+                        >
+                          {pendingIds[data.userId] ? (
+                            <span className="h-2.5 w-2.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                          ) : followedIds[data.userId] ? (
+                            <>
+                              <Check className="h-3 w-3" />
+                              <span>Siguiendo</span>
+                            </>
+                          ) : (
+                            <>
+                              <UserPlus className="h-3 w-3" />
+                              <span>Seguir</span>
+                            </>
+                          )}
+                        </button>
+                      )}
 
                       {/* Bio */}
                       <p className="text-xs text-neutral-450 leading-relaxed font-light line-clamp-2 h-8">
@@ -325,14 +390,43 @@ export function ExpertsClient({
                         </div>
                       </div>
 
-                      {/* Rep / Level */}
-                      <div className="text-right shrink-0 flex flex-col gap-0.5">
-                        <span className="text-xs font-semibold text-white font-mono">
-                          {expert.score.toLocaleString()} pts
-                        </span>
-                        <span className={`text-[9px] font-medium ${getLevelColor(expert.score)}`}>
-                          {getLevelBadge(expert.score)} {getUserLevel(expert.score)}
-                        </span>
+                      {/* Social Actions & Score */}
+                      <div className="flex items-center gap-3 shrink-0">
+                        {currentUserId && currentUserId !== expert.userId && (
+                          <button
+                            onClick={() => handleFollowToggle(expert.userId)}
+                            disabled={pendingIds[expert.userId]}
+                            className={`px-3 py-1 rounded-full text-[10px] font-semibold transition-all cursor-pointer flex items-center gap-1 ${
+                              followedIds[expert.userId]
+                                ? "bg-neutral-900 border border-neutral-850 text-neutral-350 hover:bg-red-950/20 hover:border-red-900/40 hover:text-red-400"
+                                : "bg-white text-neutral-950 hover:bg-neutral-200"
+                            }`}
+                          >
+                            {pendingIds[expert.userId] ? (
+                              <span className="h-2.5 w-2.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            ) : followedIds[expert.userId] ? (
+                              <>
+                                <Check className="h-3 w-3" />
+                                <span>Siguiendo</span>
+                              </>
+                            ) : (
+                              <>
+                                <UserPlus className="h-3 w-3" />
+                                <span>Seguir</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+
+                        {/* Rep / Level */}
+                        <div className="text-right flex flex-col gap-0.5">
+                          <span className="text-xs font-semibold text-white font-mono">
+                            {expert.score.toLocaleString()} pts
+                          </span>
+                          <span className={`text-[9px] font-medium ${getLevelColor(expert.score)}`}>
+                            {getLevelBadge(expert.score)} {getUserLevel(expert.score)}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   );
@@ -347,10 +441,9 @@ export function ExpertsClient({
   );
 }
 
-// Helper para detectar ancho de pantalla en SSR (simplificado)
 function mdMatches() {
   if (typeof window !== "undefined") {
     return window.innerWidth >= 768;
   }
-  return true; // Default server side
+  return true;
 }
