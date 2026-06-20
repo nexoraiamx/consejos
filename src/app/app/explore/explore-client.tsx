@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { CommunityCard } from "@/components/shared/community-card";
-import { Search, Compass, Grid, Laptop, BookOpen, Inbox, Plus } from "lucide-react";
+import { Search, Compass, Grid, Laptop, BookOpen, Inbox, Plus, Sparkles } from "lucide-react";
 import Link from "next/link";
 
 interface CommunityData {
@@ -18,8 +18,10 @@ interface CommunityData {
 
 export default function ExploreClient({
   initialCommunities = [],
+  showPreferencesCTA = false,
 }: {
   initialCommunities?: CommunityData[];
+  showPreferencesCTA?: boolean;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("Todos");
@@ -76,6 +78,26 @@ export default function ExploreClient({
           <span>Crear Comunidad</span>
         </Link>
       </div>
+
+      {showPreferencesCTA && (
+        <div className="p-6 rounded-3xl border border-neutral-900 bg-neutral-950/40 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-col gap-1 text-left">
+            <span className="text-xs font-semibold text-neutral-200 flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5 text-blue-400" />
+              Recomendaciones Personalizadas
+            </span>
+            <span className="text-[11px] text-neutral-400 font-light leading-relaxed">
+              Completa tus preferencias e intereses en los Ajustes para recomendarte las comunidades más relevantes para ti.
+            </span>
+          </div>
+          <Link
+            href="/app/settings"
+            className="rounded-full bg-white text-neutral-950 px-4 py-2 text-xs font-semibold hover:bg-neutral-200 transition-all cursor-pointer text-center shrink-0"
+          >
+            Completar Preferencias
+          </Link>
+        </div>
+      )}
 
       {/* Barra de búsqueda premium */}
       <div className="relative w-full max-w-lg">

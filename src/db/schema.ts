@@ -37,6 +37,11 @@ export const profiles = pgTable(
     isExpert: boolean("is_expert").default(false).notNull(), // Expert System Flag
     expertise: jsonb("expertise").$type<string[]>().default([]).notNull(), // Expert Tags
     verifiedAt: timestamp("verified_at"), // Verification Timestamp
+    socialLinks: jsonb("social_links").$type<Record<string, string>>().default({}).notNull(),
+    interests: jsonb("interests").$type<string[]>().default([]).notNull(),
+    skillLevel: varchar("skill_level", { length: 50 }),
+    onboardingCompleted: boolean("onboarding_completed").default(false).notNull(),
+    discoveryGoals: jsonb("discovery_goals").$type<string[]>().default([]).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

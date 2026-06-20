@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import { Home, Compass, Bell, Settings, User, LogOut, Menu, X, Command, Shield } from "lucide-react";
-import { UserButton, SignOutButton } from "@clerk/nextjs";
+import { useUser, UserButton, SignOutButton } from "@clerk/nextjs";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { getUserRoleAction } from "@/app/actions/users";
+import { usePathname, useRouter } from "next/navigation";
+import { getUserProfileAction } from "@/app/actions/users";
 import { getUnreadNotificationsCountAction } from "@/app/actions/notifications";
 
 export default function PlatformLayout({
@@ -14,17 +14,43 @@ export default function PlatformLayout({
   children: React.ReactNode;
 }>) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { isLoaded, isSignedIn } = useUser();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [isOnboardingChecking, setIsOnboardingChecking] = useState(true);
+  const [profileExists, setProfileExists] = useState<boolean | null>(null); // null = loading, false = not synced, true = synced
 
   useEffect(() => {
-    getUserRoleAction().then((res) => {
-      if (res?.globalRole === "GLOBAL_ADMIN") {
-        setIsAdmin(true);
+    if (!isLoaded) return;
+
+    if (!isSignedIn) {
+      setIsOnboardingChecking(false);
+      return;
+    }
+
+    getUserProfileAction().then((res) => {
+      if (res && res.profile) {
+        setProfileExists(true);
+        if (res.user.globalRole === "GLOBAL_ADMIN") {
+          setIsAdmin(true);
+        }
+        if (!res.profile.onboardingCompleted && pathname !== "/app/onboarding") {
+          router.replace("/app/onboarding");
+        } else {
+          setIsOnboardingChecking(false);
+        }
+      } else {
+        setProfileExists(false);
+        setIsOnboardingChecking(false);
       }
+    }).catch((err) => {
+      console.error("Error fetching user profile in layout:", err);
+      setProfileExists(false);
+      setIsOnboardingChecking(false);
     });
-  }, []);
+  }, [isLoaded, isSignedIn, pathname, router]);
 
   useEffect(() => {
     getUnreadNotificationsCountAction().then((count) => {
@@ -46,6 +72,50 @@ export default function PlatformLayout({
     }
     return pathname.startsWith(path);
   };
+
+  // No bloquear onboarding
+  if (pathname === "/app/onboarding") {
+    return <>{children}</>;
+  }
+
+  // Si está autenticado en Clerk pero el perfil no se ha sincronizado en Neon
+  if (isSignedIn && profileExists === false) {
+    return (
+      <div className="min-h-screen bg-black text-white flex flex-col justify-center items-center px-4 relative overflow-hidden font-sans">
+        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-900/10 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-purple-900/10 rounded-full blur-[120px] pointer-events-none" />
+        
+        <div className="w-full max-w-md p-8 rounded-3xl border border-neutral-900 bg-neutral-950/40 backdrop-blur-xl flex flex-col items-center gap-6 text-center shadow-xl relative z-10">
+          <div className="h-12 w-12 rounded-2xl bg-neutral-900 border border-neutral-800 flex items-center justify-center text-blue-400">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-400" />
+          </div>
+          <div className="flex flex-col gap-2">
+            <h1 className="text-lg font-semibold tracking-tight">Terminando configuración de cuenta</h1>
+            <p className="text-xs text-neutral-400 font-light leading-relaxed max-w-xs mx-auto">
+              Estamos preparando tu espacio en Consejos y sincronizando tus credenciales de Clerk. Esto solo tomará unos segundos.
+            </p>
+          </div>
+          <button 
+            onClick={() => window.location.reload()}
+            className="w-full rounded-full bg-white text-neutral-950 px-5 py-2.5 text-xs font-semibold hover:bg-neutral-200 transition-all cursor-pointer shadow-md"
+          >
+            Verificar nuevamente
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isOnboardingChecking || !isLoaded) {
+    return (
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center text-neutral-400">
+        <div className="flex flex-col items-center gap-3">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+          <span className="text-xs font-light tracking-wide">Cargando perfil...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-neutral-950 text-neutral-100 font-sans">

@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { communities, communityMembers, joinRequests } from "@/db/schema";
+import { communities, communityMembers, joinRequests, profiles } from "@/db/schema";
 import { eq, and, isNull, sql, or } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import ExploreClient from "./explore-client";
@@ -17,6 +17,25 @@ export default async function ExplorePage() {
     privacyType: string;
     createdAt: Date;
   }[] = [];
+
+  let showPreferencesCTA = false;
+  let interests: string[] = [];
+
+  if (user) {
+    try {
+      const profile = await db.query.profiles.findFirst({
+        where: eq(profiles.userId, user.id),
+      });
+      if (profile) {
+        interests = profile.interests || [];
+        if (interests.length === 0) {
+          showPreferencesCTA = true;
+        }
+      }
+    } catch (err) {
+      console.error("Error al consultar perfil del usuario para intereses:", err);
+    }
+  }
 
   try {
     dbCommunities = await db
@@ -103,5 +122,35 @@ export default async function ExplorePage() {
     })
   );
 
-  return <ExploreClient initialCommunities={communitiesWithMeta} />;
+  // Ordenar comunidades por coincidencia con intereses del usuario
+  let sortedCommunities = [...communitiesWithMeta];
+  if (interests.length > 0) {
+    sortedCommunities.sort((a, b) => {
+      const getMatchScore = (comm: typeof a) => {
+        let score = 0;
+        const searchArea = `${comm.displayName} ${comm.slug} ${comm.description || ""}`.toLowerCase();
+
+        interests.forEach(interest => {
+          const lowerInterest = interest.toLowerCase();
+          if (searchArea.includes(lowerInterest)) {
+            score += 10; // Coincidencia exacta
+          }
+          // Coincidencias de palabras individuales
+          const words = lowerInterest.split(" ");
+          if (words.length > 1) {
+            words.forEach(word => {
+              if (word.length > 3 && searchArea.includes(word)) {
+                score += 3;
+              }
+            });
+          }
+        });
+        return score;
+      };
+
+      return getMatchScore(b) - getMatchScore(a);
+    });
+  }
+
+  return <ExploreClient initialCommunities={sortedCommunities} showPreferencesCTA={showPreferencesCTA} />;
 }
