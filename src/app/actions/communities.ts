@@ -87,7 +87,9 @@ export async function createCommunityAction(formData: CreateCommunityInput) {
       return newCommunity;
     });
 
+    revalidatePath("/app", "layout");
     revalidatePath("/app/explore");
+    revalidatePath(`/app/r/${result.slug}`);
     return { success: true, slug: result.slug };
   } catch (error) {
     console.error("Error al crear comunidad:", error);

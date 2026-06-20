@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { users, profiles } from "@/db/schema";
 import { eq, and, ne } from "drizzle-orm";
 import { getCurrentUser, requireAuth } from "@/lib/auth-helpers";
+import { revalidatePath } from "next/cache";
 
 export async function getUserRoleAction() {
   try {
@@ -100,6 +101,10 @@ export async function submitOnboardingAction(data: {
       updatedAt: new Date(),
     }).where(eq(profiles.userId, user.id));
 
+    revalidatePath("/app", "layout");
+    revalidatePath("/app/explore");
+    revalidatePath("/app/settings");
+
     return { success: true };
   } catch (error: any) {
     console.error("Error in submitOnboardingAction:", error);
@@ -139,6 +144,9 @@ export async function updateProfileAction(data: {
       updatedAt: new Date(),
     }).where(eq(profiles.userId, user.id));
 
+    revalidatePath("/app", "layout");
+    revalidatePath("/app/settings");
+
     return { success: true };
   } catch (error: any) {
     console.error("Error in updateProfileAction:", error);
@@ -161,6 +169,10 @@ export async function updateInterestsAction(data: {
       updatedAt: new Date(),
     }).where(eq(profiles.userId, user.id));
 
+    revalidatePath("/app", "layout");
+    revalidatePath("/app/settings");
+    revalidatePath("/app");
+
     return { success: true };
   } catch (error: any) {
     console.error("Error in updateInterestsAction:", error);
@@ -176,6 +188,9 @@ export async function updateSocialLinksAction(socialLinks: Record<string, string
       socialLinks,
       updatedAt: new Date(),
     }).where(eq(profiles.userId, user.id));
+
+    revalidatePath("/app", "layout");
+    revalidatePath("/app/settings");
 
     return { success: true };
   } catch (error: any) {

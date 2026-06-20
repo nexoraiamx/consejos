@@ -21,36 +21,74 @@ export default function PlatformLayout({
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOnboardingChecking, setIsOnboardingChecking] = useState(true);
   const [profileExists, setProfileExists] = useState<boolean | null>(null); // null = loading, false = not synced, true = synced
+  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean | null>(null);
 
   useEffect(() => {
+    console.log("[Layout Log] isLoaded:", isLoaded, "isSignedIn:", isSignedIn, "pathname:", pathname);
     if (!isLoaded) return;
 
     if (!isSignedIn) {
+      console.log("[Layout Log] User is signed out. Skipping profile checks.");
       setIsOnboardingChecking(false);
       return;
     }
 
-    getUserProfileAction().then((res) => {
-      if (res && res.profile) {
-        setProfileExists(true);
-        if (res.user.globalRole === "GLOBAL_ADMIN") {
-          setIsAdmin(true);
-        }
-        if (!res.profile.onboardingCompleted && pathname !== "/app/onboarding") {
-          router.replace("/app/onboarding");
+    // Optimization: if profile exists and onboarding is completed, skip redundant checks on page navigation
+    if (profileExists === true && isOnboardingCompleted === true) {
+      console.log("[Layout Log] Profile already validated and onboarding completed. Skipping re-fetch.");
+      setIsOnboardingChecking(false);
+      return;
+    }
+
+    let retries = 0;
+    const maxRetries = 6; // Retry for up to 9 seconds (6 * 1.5s)
+
+    const checkProfile = () => {
+      console.log(`[Layout Log] Querying getUserProfileAction (Attempt ${retries + 1}/${maxRetries + 1})...`);
+      getUserProfileAction().then((res) => {
+        console.log("[Layout Log] getUserProfileAction response:", res);
+        
+        if (res && res.profile) {
+          console.log("[Layout Log] Profile found. User ID:", res.user.id, "OnboardingCompleted:", res.profile.onboardingCompleted);
+          setProfileExists(true);
+          setIsOnboardingCompleted(res.profile.onboardingCompleted);
+          
+          if (res.user.globalRole === "GLOBAL_ADMIN") {
+            setIsAdmin(true);
+          }
+          
+          if (!res.profile.onboardingCompleted && pathname !== "/app/onboarding") {
+            console.log("[Layout Log] Redirecting to /app/onboarding");
+            router.replace("/app/onboarding");
+          } else {
+            setIsOnboardingChecking(false);
+          }
         } else {
+          console.warn("[Layout Log] Profile not found or null. User might not be synced yet in Neon DB.");
+          if (retries < maxRetries) {
+            retries++;
+            console.log(`[Layout Log] Scheduling automatic profile check retry in 1.5s...`);
+            setTimeout(checkProfile, 1500);
+          } else {
+            console.error("[Layout Log] Max retries reached. Marking profile as not synced.");
+            setProfileExists(false);
+            setIsOnboardingChecking(false);
+          }
+        }
+      }).catch((err) => {
+        console.error("[Layout Log] Error fetching user profile in layout:", err);
+        if (retries < maxRetries) {
+          retries++;
+          setTimeout(checkProfile, 1500);
+        } else {
+          setProfileExists(false);
           setIsOnboardingChecking(false);
         }
-      } else {
-        setProfileExists(false);
-        setIsOnboardingChecking(false);
-      }
-    }).catch((err) => {
-      console.error("Error fetching user profile in layout:", err);
-      setProfileExists(false);
-      setIsOnboardingChecking(false);
-    });
-  }, [isLoaded, isSignedIn, pathname, router]);
+      });
+    };
+
+    checkProfile();
+  }, [isLoaded, isSignedIn, pathname, router, profileExists, isOnboardingCompleted]);
 
   useEffect(() => {
     getUnreadNotificationsCountAction().then((count) => {
