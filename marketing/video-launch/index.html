@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Consejos launch video generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;650;700&family=Playfair+Display:ital,wght@0,600;1,400&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body, html {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background-color: #050506;
+      color: #f5f5f7;
+      font-family: 'Outfit', sans-serif;
+      position: relative;
+    }
+    
+    /* Background gradients */
+    .bg-gradient {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 50% 50%, #0c0b11 0%, #050506 100%);
+      z-index: 1;
+    }
+
+    /* Volumetric light flares */
+    .light-flare {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(160px);
+      opacity: 0.15;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .flare-1 {
+      width: 800px;
+      height: 800px;
+      background: radial-gradient(circle, #6366f1 0%, rgba(99, 102, 241, 0) 70%);
+      top: -200px;
+      left: -200px;
+    }
+    .flare-2 {
+      width: 900px;
+      height: 900px;
+      background: radial-gradient(circle, #a855f7 0%, rgba(168, 85, 247, 0) 70%);
+      bottom: -250px;
+      right: -200px;
+    }
+
+    /* Canvas for floating particles */
+    canvas#particles {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    /* 3D Scene Wrapper */
+    .scene-viewport {
+      position: absolute;
+      inset: 0;
+      perspective: 1400px;
+      perspective-origin: 50% 50%;
+      z-index: 4;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .scene-camera {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      transform-style: preserve-3d;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Cinematic Screenshots in 3D */
+    .screenshot-card {
+      position: absolute;
+      max-width: 1400px;
+      max-height: 800px;
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 40px 100px rgba(0, 0, 0, 0.8), 0 0 40px rgba(99, 102, 241, 0.05);
+      background: rgba(255, 255, 255, 0.01);
+      backdrop-filter: blur(12px);
+      transform-style: preserve-3d;
+      opacity: 0;
+      pointer-events: none;
+      object-fit: contain;
+    }
+
+    /* Onscreen Typography Layer */
+    .ui-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 80px 100px;
+      pointer-events: none;
+    }
+
+    .text-title-wrapper {
+      max-width: 900px;
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    
+    .scene-title {
+      font-size: 58px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      background: linear-gradient(to right, #ffffff 30%, #a3a3a3 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 12px;
+      text-shadow: 0 2px 20px rgba(255, 255, 255, 0.05);
+    }
+
+    .scene-subtitle {
+      font-family: 'Playfair Display', serif;
+      font-size: 32px;
+      font-style: italic;
+      color: #9333ea;
+      text-shadow: 0 0 20px rgba(147, 51, 234, 0.2);
+    }
+
+    .branding-corner {
+      position: absolute;
+      top: 60px;
+      left: 100px;
+      font-size: 20px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      color: rgba(255, 255, 255, 0.8);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    .branding-corner span {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background-color: #9333ea;
+      border-radius: 50%;
+      box-shadow: 0 0 10px #9333ea;
+    }
+
+    /* Highlighter box for registrations */
+    .button-highlighter {
+      position: absolute;
+      border: 2px dashed #9333ea;
+      border-radius: 9999px;
+      box-shadow: 0 0 30px rgba(147, 51, 234, 0.4);
+      opacity: 0;
+      z-index: 15;
+      pointer-events: none;
+      transform: translate3d(0,0,10px);
+    }
+
+    /* Final Scene UI */
+    .final-logo-wrapper {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      z-index: 20;
+      opacity: 0;
+      transform: scale(0.95);
+    }
+
+    .final-logo-icon {
+      font-size: 110px;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      background: linear-gradient(135deg, #ffffff 40%, #c084fc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 10px 40px rgba(192, 132, 252, 0.25);
+    }
+
+    .final-tagline {
+      font-family: 'Playfair Display', serif;
+      font-size: 38px;
+      font-style: italic;
+      color: rgba(255, 255, 255, 0.8);
+      margin-top: 15px;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    }
+
+    .final-cta {
+      margin-top: 40px;
+      padding: 14px 36px;
+      font-size: 18px;
+      font-weight: 650;
+      letter-spacing: 0.02em;
+      color: #030303;
+      background-color: #ffffff;
+      border-radius: 9999px;
+      box-shadow: 0 10px 30px rgba(255,255,255,0.25), 0 0 20px rgba(255,255,255,0.1);
+      text-transform: uppercase;
+    }
+
+    /* Floating UI items for scene 8 */
+    .notif-float-card {
+      position: absolute;
+      width: 480px;
+      background: rgba(20, 20, 25, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+      backdrop-filter: blur(16px);
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      opacity: 0;
+      transform: translate3d(0, 100px, -200px);
+      z-index: 8;
+    }
+    .notif-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #888;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .notif-text {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .notif-title {
+      font-size: 14px;
+      font-weight: 650;
+      color: #fff;
+    }
+    .notif-sub {
+      font-size: 12px;
+      color: #a1a1aa;
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- Background Layer -->
+  <div class="bg-gradient"></div>
+  <div class="light-flare flare-1" id="flare-1"></div>
+  <div class="light-flare flare-2" id="flare-2"></div>
+  
+  <!-- Particles Canvas -->
+  <canvas id="particles" width="1920" height="1080"></canvas>
+
+  <!-- 3D Scene -->
+  <div class="scene-viewport">
+    <div class="scene-camera" id="camera">
+      <!-- Screenshot Cards -->
+      <img id="sc-landing" class="screenshot-card" src="./assets/screenshots/landing.png" alt="Landing">
+      <img id="sc-feed" class="screenshot-card" src="./assets/screenshots/feed.png" alt="Feed">
+      <img id="sc-comunidades" class="screenshot-card" src="./assets/screenshots/comunidades.png" alt="Comunidades">
+      <img id="sc-comunidad-indiv" class="screenshot-card" src="./assets/screenshots/comunidad_individual.png" alt="Comunidad">
+      <img id="sc-crear-pub" class="screenshot-card" src="./assets/screenshots/crear_publicacion.png" alt="Crear Publicacion">
+      <img id="sc-comentarios" class="screenshot-card" src="./assets/screenshots/comentarios.png" alt="Comentarios">
+      <img id="sc-multimedia" class="screenshot-card" src="./assets/screenshots/multimedia.png" alt="Multimedia">
+      <img id="sc-ranking" class="screenshot-card" src="./assets/screenshots/ranking.png" alt="Ranking">
+      <img id="sc-perfil" class="screenshot-card" src="./assets/screenshots/perfil.png" alt="Perfil">
+      <img id="sc-notificaciones" class="screenshot-card" src="./assets/screenshots/notificaciones.png" alt="Notificaciones">
+      <img id="sc-onboarding" class="screenshot-card" src="./assets/screenshots/onboarding.png" alt="Onboarding">
+
+      <!-- Custom floating cards for Scene 8 (Notificaciones) -->
+      <div id="notif-1" class="notif-float-card">
+        <div class="notif-avatar" style="background: url('./assets/screenshots/perfil.png') center/cover;"></div>
+        <div class="notif-text">
+          <div class="notif-title">Patricio Garcia respondió con un audio</div>
+          <div class="notif-sub">Hace 1 minuto · Comunidad Pruebas</div>
+        </div>
+      </div>
+      <div id="notif-2" class="notif-float-card">
+        <div class="notif-avatar" style="background: url('./assets/screenshots/perfil.png') center/cover;"></div>
+        <div class="notif-text">
+          <div class="notif-title">Tu respuesta fue aceptada como solución</div>
+          <div class="notif-sub">+50 Pts de Reputación ganados</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Branding and UI Overlay -->
+  <div class="ui-overlay">
+    <div class="branding-corner" id="branding">
+      <span></span> Consejos
+    </div>
+    
+    <!-- Title Text Wrapper -->
+    <div class="text-title-wrapper" id="text-wrapper">
+      <h1 class="scene-title" id="title">El conocimiento merece mejores comunidades.</h1>
+      <p class="scene-subtitle" id="subtitle">Consejos</p>
+    </div>
+  </div>
+
+  <!-- Highlights overlay -->
+  <div class="button-highlighter" id="highlighter"></div>
+
+  <!-- Final Scene screen -->
+  <div class="final-logo-wrapper" id="final-logo">
+    <div class="final-logo-icon">Consejos</div>
+    <div class="final-tagline">Donde los expertos construyen comunidad.</div>
+    <div class="final-cta">Próximamente</div>
+  </div>
+
+  <script>
+    // Particle class definition
+    class Particle {
+      constructor(canvasWidth, canvasHeight, seed) {
+        this.canvasWidth = canvasWidth;
+        this.canvasHeight = canvasHeight;
+        // Deterministic random generator based on seed to make frames perfectly reproducible
+        this.rngVal = seed;
+      }
+      
+      random() {
+        // Simple LCG pseudo-random number generator
+        this.rngVal = (this.rngVal * 1664525 + 1013904223) % 4294967296;
+        return this.rngVal / 4294967296;
+      }
+
+      init() {
+        this.x = this.random() * this.canvasWidth;
+        this.y = this.random() * this.canvasHeight;
+        this.size = this.random() * 2.2 + 0.6;
+        this.speedX = (this.random() * 0.15 - 0.075);
+        this.speedY = -(this.random() * 0.2 + 0.05); // Float upwards
+        this.opacity = this.random() * 0.3 + 0.1;
+        this.wobbleSpeed = this.random() * 0.005 + 0.002;
+        this.wobbleDistance = this.random() * 20;
+        this.seed = this.random() * 100;
+      }
+
+      draw(ctx, frame) {
+        // Calculate coordinate at frame
+        let currentY = this.y + this.speedY * frame;
+        // Wrap around height
+        currentY = ((currentY % this.canvasHeight) + this.canvasHeight) % this.canvasHeight;
+
+        let wobble = Math.sin(frame * this.wobbleSpeed + this.seed) * this.wobbleDistance;
+        let currentX = this.x + this.speedX * frame + wobble;
+        // Wrap around width
+        currentX = ((currentX % this.canvasWidth) + this.canvasWidth) % this.canvasWidth;
+
+        ctx.beginPath();
+        ctx.arc(currentX, currentY, this.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(168, 85, 247, ${this.opacity})`;
+        ctx.shadowBlur = 6;
+        ctx.shadowColor = "rgba(168, 85, 247, 0.4)";
+        ctx.fill();
+        // Reset shadow for performance
+        ctx.shadowColor = 'transparent';
+      }
+    }
+
+    // Initialize 200 particles with seed
+    const canvas = document.getElementById("particles");
+    const ctx = canvas.getContext("2d");
+    const particles = [];
+    let prngSeed = 123456789;
+    for (let i = 0; i < 180; i++) {
+      const p = new Particle(1920, 1080, prngSeed + i * 987654);
+      p.init();
+      particles.push(p);
+    }
+
+    // Easing library
+    const Easing = {
+      easeInOutCubic: t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2,
+      easeOutCubic: t => 1 - Math.pow(1 - t, 3),
+      easeInCubic: t => t * t * t,
+      easeOutQuad: t => 1 - (1 - t) * (1 - t),
+      easeInQuad: t => t * t,
+      linear: t => t,
+    };
+
+    function interpolate(start, end, progress, ease = Easing.easeInOutCubic) {
+      const t = ease(progress);
+      return start + (end - start) * t;
+    }
+
+    // Elements
+    const camera = document.getElementById("camera");
+    const flare1 = document.getElementById("flare-1");
+    const flare2 = document.getElementById("flare-2");
+    
+    // UI elements
+    const branding = document.getElementById("branding");
+    const textWrapper = document.getElementById("text-wrapper");
+    const title = document.getElementById("title");
+    const subtitle = document.getElementById("subtitle");
+    const highlighter = document.getElementById("highlighter");
+    const finalLogo = document.getElementById("final-logo");
+
+    // Screenshot elements
+    const scLanding = document.getElementById("sc-landing");
+    const scFeed = document.getElementById("sc-feed");
+    const scComunidades = document.getElementById("sc-comunidades");
+    const scComunidadIndiv = document.getElementById("sc-comunidad-indiv");
+    const scCrearPub = document.getElementById("sc-crear-pub");
+    const scComentarios = document.getElementById("sc-comentarios");
+    const scMultimedia = document.getElementById("sc-multimedia");
+    const scRanking = document.getElementById("sc-ranking");
+    const scPerfil = document.getElementById("sc-perfil");
+    const scNotificaciones = document.getElementById("sc-notificaciones");
+    const scOnboarding = document.getElementById("sc-onboarding");
+
+    // Floating notification elements
+    const notif1 = document.getElementById("notif-1");
+    const notif2 = document.getElementById("notif-2");
+
+    // Helper to hide all screenshot cards
+    function hideAllScreenshots() {
+      const cards = document.querySelectorAll(".screenshot-card");
+      cards.forEach(c => {
+        c.style.opacity = 0;
+        c.style.pointerEvents = "none";
+      });
+      notif1.style.opacity = 0;
+      notif2.style.opacity = 0;
+      highlighter.style.opacity = 0;
+    }
+
+    // MAIN FRAME RENDERER FUNCTION
+    // This receives a frame index (0 to 4019, 60fps, 67 seconds total)
+    window.setFrame = function(frame) {
+      // Clear canvas
+      ctx.clearRect(0, 0, 1920, 1080);
+      
+      // Draw particles
+      particles.forEach(p => p.draw(ctx, frame));
+
+      // Reset transforms and visibility
+      hideAllScreenshots();
+      finalLogo.style.opacity = 0;
+      
+      // Standard flares motion
+      const fx = Math.sin(frame * 0.003) * 150;
+      const fy = Math.cos(frame * 0.002) * 100;
+      flare1.style.transform = `translate3d(${fx}px, ${fy}px, 0)`;
+      flare2.style.transform = `translate3d(${-fx}px, ${-fy}px, 0)`;
+
+      // Common Branding Visibility
+      if (frame >= 300 && frame < 3540) {
+        branding.style.opacity = 1;
+        branding.style.transform = `translate3d(0,0,0)`;
+      } else {
+        branding.style.opacity = 0;
+      }
+
+      // SCENE TRIGGERS AND INTERPOLATIONS
+      
+      // ----------------------------------------------------
+      // ESCENA 1: Hero (Frames 0 - 299, 5s)
+      // ----------------------------------------------------
+      if (frame >= 0 && frame < 300) {
+        const progress = frame / 300;
+        
+        // Camera slow move
+        const camZ = interpolate(-200, 0, progress, Easing.linear);
+        camera.style.transform = `translate3d(0, 0, ${camZ}px)`;
+
+        // Text fade in/out
+        textWrapper.style.opacity = progress < 0.1 ? progress * 10 : (progress > 0.9 ? (1 - progress) * 10 : 1);
+        textWrapper.style.transform = `translate3d(0, ${interpolate(30, 0, progress, Easing.easeOutCubic)}px, 0)`;
+        
+        title.innerHTML = "El conocimiento merece mejores comunidades.";
+        subtitle.innerHTML = "Consejos";
+        subtitle.style.color = "#9333ea";
+
+        // Draw logo centered
+        scLanding.style.opacity = 0;
+      }
+      
+      // ----------------------------------------------------
+      // ESCENA 2: Landing (Frames 300 - 659, 6s)
+      // ----------------------------------------------------
+      else if (frame >= 300 && frame < 660) {
+        const progress = (frame - 300) / 360;
+        
+        // Text
+        textWrapper.style.opacity = progress < 0.1 ? progress * 10 : (progress > 0.9 ? (1 - progress) * 10 : 1);
+        title.innerHTML = "Comunidades privadas para expertos.";
+        subtitle.innerHTML = "Landing Page";
+        subtitle.style.color = "#3b82f6";
+        
+        // Card Zoom & Perspective
+        scLanding.style.opacity = progress < 0.15 ? progress / 0.15 : (progress > 0.85 ? (1 - progress) / 0.15 : 1);
+        const cardZ = interpolate(0, 120, progress, Easing.easeOutQuad);
+        const cardRotY = interpolate(-15, -5, progress, Easing.easeInOutCubic);
+        const cardRotX = interpolate(10, 3, progress, Easing.easeInOutCubic);
+        scLanding.style.transform = `translate3d(0, 0, ${cardZ}px) rotateY(${cardRotY}deg) rotateX(${cardRotX}deg)`;
+        
+        // Highlighter on "Registrarse" button (placed on top of the landing header button)
+        // Simulate highlighting after 2.5s (frame 450)
+        if (frame >= 450 && frame < 600) {
+          const highProg = (frame - 450) / 150;
+          highlighter.style.opacity = highProg < 0.1 ? highProg * 10 : (highProg > 0.9 ? (1 - highProg) * 10 : 1);
+          // Position relative to screen overlay coordinates (approx header sign up position)
+          highlighter.style.left = "1130px";
+          highlighter.style.top = "180px";
+          highlighter.style.width = "130px";
+          highlighter.style.height = "42px";
+        }
+      }
+      
+      // ----------------------------------------------------
+      // ESCENA 3: Comunidades (Frames 660 - 1019, 6s)
+      // ----------------------------------------------------
+      else if (frame >= 660 && frame < 1020) {
+        const progress = (frame - 660) / 360;
+        
+        // Text
+        textWrapper.style.opacity = progress < 0.1 ? progress * 10 : (progress > 0.9 ? (1 - progress) * 10 : 1);
+        title.innerHTML = "Crea espacios exclusivos.";
+        subtitle.innerHTML = "Explorar Comunidades";
+        subtitle.style.color = "#a855f7";
+
+        // Layout multiple cards
+        // Card 1: Explore
+        scComunidades.style.opacity = progress < 0.15 ? progress / 0.15 : (progress > 0.85 ? (1 - progress) / 0.15 : 1);
+        const card1Z = interpolate(-200, 100, progress, Easing.easeOutQuad);
+        const card1RotY = interpolate(-25, -12, progress, Easing.easeInOutCubic);
+        scComunidades.style.transform = `translate3d(-200px, -40px, ${card1Z}px) rotateY(${card1RotY}deg) rotateX(8deg)`;
+
+        // Card 2: Individual Community
+        scComunidadIndiv.style.opacity = progress < 0.25 ? (progress - 0.1) / 0.15 : (progress > 0.85 ? (1 - progress) / 0.15 : 1);
+        if (progress > 0.1) {
+          const card2Z = interpolate(-300, 180, (progress - 0.1) / 0.9, Easing.easeOutQuad);
+          const card2RotY = interpolate(25, 12, (progress - 0.1) / 0.9, Easing.easeInOutCubic);
+          scComunidadIndiv.style.transform = `translate3d(300px, 40px, ${card2Z}px) rotateY(${card2RotY}deg) rotateX(-5deg)`;
+        }
+      }
+      
+      // ----------------------------------------------------
+      // ESCENA 4: Publicaciones (Frames 1020 - 1499, 8s)
+      // ----------------------------------------------------
+      else if (frame >= 1020 && frame < 1500) {
+        const progress = (frame - 1020) / 480;
+        
+        // Text
+        textWrapper.style.opacity = progress < 0.08 ? progress / 0.08 : (progress > 0.9 ? (1 - progress) * 10 : 1);
+        title.innerHTML = "Conversaciones de alto valor.";
+        subtitle.innerHTML = "Publicaciones y Respuestas";
+        subtitle.style.color = "#ec4899";
+
+        // Single Post Card focus
+        scComentarios.style.opacity = progress < 0.1 ? progress / 0.1 : (progress > 0.9 ? (1 - progress) / 0.1 : 1);
+        const cardZ = interpolate(0, 180, progress, Easing.easeOutCubic);
+        const cardRotX = interpolate(12, 0, progress, Easing.easeOutQuad);
+        const cardRotY = interpolate(15, -4, progress, Easing.easeOutQuad);
+        scComentarios.style.transform = `translate3d(0, 0, ${cardZ}px) rotateX(${cardRotX}deg) rotateY(${cardRotY}deg)`;
+      }
+      
+      // ----------------------------------------------------
+      // ESCENA 5: Multimedia (Frames 1500 - 2099, 10s)
+      // ----------------------------------------------------
+      else if (frame >= 1500 && frame < 2100) {
+        const progress = (frame - 1500) / 600;
+        
+        // Text
+        textWrapper.style.opacity = progress < 0.08 ? progress / 0.08 : (progress > 0.9 ? (1 - progress) * 10 : 1);
+        title.innerHTML = "Comparte más que texto.";
+        subtitle.innerHTML = "Audio, Video, Imágenes y PDF";
+        subtitle.style.color = "#22c55e";
+
+        // Focus on multimedia post
+        scMultimedia.style.opacity = progress < 0.1 ? progress / 0.1 : (progress > 0.9 ? (1 - progress) / 0.1 : 1);
+        
+        // Slow pan and zoom
+        const cardZ = interpolate(50, 240, progress, Easing.linear);
+        const cardX = interpolate(-60, 40, progress, Easing.easeInOutCubic);
+        const cardY = interpolate(30, -30, progress, Easing.easeInOutCubic);
+        const cardRotX = interpolate(8, -4, progress, Easing.easeInOutCubic);
+        const cardRotY = interpolate(-10, 6, progress, Easing.easeInOutCubic);
+        scMultimedia.style.transform = `translate3d(${cardX}px, ${cardY}px, ${cardZ}px) rotateX(${cardRotX}deg) rotateY(${cardRotY}deg)`;
+      }
+      
+      // ----------------------------------------------------
+      // ESCENA 6: Expertos (Frames 2100 - 2579, 8s)
+      // ----------------------------------------------------
+      else if (frame >= 2100 && frame < 2580) {
+        const progress = (frame - 2100) / 480;
+        
+        // Text
+        textWrapper.style.opacity = progress < 0.08 ? progress / 0.08 : (progress > 0.9 ? (1 - progress) * 10 : 1);
+        title.innerHTML = "El conocimiento se reconoce.";
+        subtitle.innerHTML = "Líderes y Reputación";
+        subtitle.style.color = "#eab308";
+
+        // Leaderboard page
+        scRanking.style.opacity = progress < 0.1 ? progress / 0.1 : (progress > 0.9 ? (1 - progress) / 0.1 : 1);
+        const cardZ = interpolate(-50, 160, progress, Easing.easeOutQuad);
+        const cardRotX = interpolate(-15, -4, progress, Easing.easeOutQuad);
+        const cardRotY = interpolate(10, 12, progress, Easing.linear);
+        scRanking.style.transform = `translate3d(0, 0, ${cardZ}px) rotateX(${cardRotX}deg) rotateY(${cardRotY}deg)`;
+      }
+      
+      // ----------------------------------------------------
+      // ESCENA 7: Perfil (Frames 2580 - 2939, 6s)
+      // ----------------------------------------------------
+      else if (frame >= 2580 && frame < 2940) {
+        const progress = (frame - 2580) / 360;
+        
+        // Text
+        textWrapper.style.opacity = progress < 0.1 ? progress / 0.1 : (progress > 0.9 ? (1 - progress) * 10 : 1);
+        title.innerHTML = "Construye autoridad.";
+        subtitle.innerHTML = "Perfiles de Expertos e Insignias";
+        subtitle.style.color = "#f97316";
+
+        // Profile screenshot
+        scPerfil.style.opacity = progress < 0.1 ? progress / 0.1 : (progress > 0.9 ? (1 - progress) / 0.1 : 1);
+        const cardZ = interpolate(40, 200, progress, Easing.easeOutQuad);
+        const cardRotX = interpolate(8, 0, progress, Easing.easeInOutCubic);
+        const cardRotY = interpolate(-8, -12, progress, Easing.easeInOutCubic);
+        scPerfil.style.transform = `translate3d(0, 0, ${cardZ}px) rotateX(${cardRotX}deg) rotateY(${cardRotY}deg)`;
+      }
+      
+      // ----------------------------------------------------
+      // ESCENA 8: Notificaciones (Frames 2940 - 3239, 5s)
+      // ----------------------------------------------------
+      else if (frame >= 2940 && frame < 3240) {
+        const progress = (frame - 2940) / 300;
+        
+        // Text
+        textWrapper.style.opacity = progress < 0.1 ? progress / 0.1 : (progress > 0.9 ? (1 - progress) * 10 : 1);
+        title.innerHTML = "Nunca pierdas una conversación.";
+        subtitle.innerHTML = "Notificaciones Inteligentes";
+        subtitle.style.color = "#ef4444";
+
+        // Notifications page background
+        scNotificaciones.style.opacity = progress < 0.1 ? progress / 0.1 : (progress > 0.9 ? (1 - progress) / 0.1 : 1);
+        const cardZ = interpolate(0, 100, progress, Easing.linear);
+        scNotificaciones.style.transform = `translate3d(-200px, 0, ${cardZ}px) rotateY(-18deg) rotateX(5deg)`;
+
+        // Float in notification 1
+        if (progress > 0.15) {
+          const n1Prog = (progress - 0.15) / 0.75;
+          notif1.style.opacity = n1Prog < 0.15 ? n1Prog / 0.15 : (n1Prog > 0.8 ? (1 - n1Prog) / 0.2 : 1);
+          const n1X = interpolate(600, 360, n1Prog, Easing.easeOutCubic);
+          const n1Y = interpolate(-150, -110, n1Prog, Easing.easeOutCubic);
+          const n1Z = interpolate(-100, 180, n1Prog, Easing.easeOutCubic);
+          notif1.style.transform = `translate3d(${n1X}px, ${n1Y}px, ${n1Z}px) rotateY(-12deg)`;
+        }
+
+        // Float in notification 2
+        if (progress > 0.3) {
+          const n2Prog = (progress - 0.3) / 0.65;
+          notif2.style.opacity = n2Prog < 0.15 ? n2Prog / 0.15 : (n2Prog > 0.8 ? (1 - n2Prog) / 0.2 : 1);
+          const n2X = interpolate(600, 390, n2Prog, Easing.easeOutCubic);
+          const n2Y = interpolate(120, 40, n2Prog, Easing.easeOutCubic);
+          const n2Z = interpolate(-100, 240, n2Prog, Easing.easeOutCubic);
+          notif2.style.transform = `translate3d(${n2X}px, ${n2Y}px, ${n2Z}px) rotateY(-12deg)`;
+        }
+      }
+      
+      // ----------------------------------------------------
+      // ESCENA 9: Onboarding (Frames 3240 - 3539, 5s)
+      // ----------------------------------------------------
+      else if (frame >= 3240 && frame < 3540) {
+        const progress = (frame - 3240) / 300;
+        
+        // Text
+        textWrapper.style.opacity = progress < 0.1 ? progress / 0.1 : (progress > 0.9 ? (1 - progress) * 10 : 1);
+        title.innerHTML = "Personalizado desde el primer minuto.";
+        subtitle.innerHTML = "Onboarding de Intereses";
+        subtitle.style.color = "#06b6d4";
+
+        // Onboarding screenshot
+        scOnboarding.style.opacity = progress < 0.1 ? progress / 0.1 : (progress > 0.9 ? (1 - progress) / 0.1 : 1);
+        const cardZ = interpolate(-50, 150, progress, Easing.easeOutQuad);
+        const cardRotY = interpolate(18, 5, progress, Easing.easeInOutCubic);
+        const cardRotX = interpolate(-8, -1, progress, Easing.easeInOutCubic);
+        scOnboarding.style.transform = `translate3d(0, 0, ${cardZ}px) rotateY(${cardRotY}deg) rotateX(${cardRotX}deg)`;
+      }
+      
+      // ----------------------------------------------------
+      // ESCENA FINAL: Logo & Outro (Frames 3540 - 4019, 8s)
+      // ----------------------------------------------------
+      else if (frame >= 3540) {
+        const progress = (frame - 3540) / 480;
+        
+        // Fade out branding and main title wrapper completely
+        textWrapper.style.opacity = 0;
+
+        // Camera slow pull back
+        const camZ = interpolate(0, -600, progress, Easing.easeOutCubic);
+        camera.style.transform = `translate3d(0, 0, ${camZ}px)`;
+
+        // Show ALL screens in a giant, premium collage floating away
+        const cards = [
+          { el: scLanding, x: -600, y: -250, z: -200, rx: 10, ry: 20 },
+          { el: scFeed, x: -200, y: -300, z: -100, rx: -5, ry: 15 },
+          { el: scComunidades, x: 250, y: -280, z: -150, rx: 12, ry: -15 },
+          { el: scComunidadIndiv, x: 600, y: -200, z: -250, rx: -10, ry: -20 },
+          { el: scCrearPub, x: -650, y: 150, z: -180, rx: -8, ry: 22 },
+          { el: scComentarios, x: -250, y: 220, z: -80, rx: 5, ry: 10 },
+          { el: scMultimedia, x: 200, y: 200, z: -120, rx: -12, ry: -8 },
+          { el: scRanking, x: 650, y: 180, z: -220, rx: 15, ry: -25 },
+        ];
+
+        cards.forEach((card, idx) => {
+          card.el.style.opacity = progress < 0.15 ? (progress / 0.15) * 0.45 : (progress > 0.8 ? (1 - progress) / 0.2 : 0.45);
+          // Apply slight movement for each card
+          const px = card.x + Math.sin(frame * 0.005 + idx) * 30;
+          const py = card.y + Math.cos(frame * 0.004 + idx) * 20;
+          const pz = card.z + progress * 80;
+          card.el.style.transform = `translate3d(${px}px, ${py}px, ${pz}px) rotateX(${card.rx}deg) rotateY(${card.ry}deg)`;
+        });
+
+        // Show Final Logo in the center
+        finalLogo.style.opacity = progress < 0.15 ? progress / 0.15 : (progress > 0.85 ? (1 - progress) / 0.15 : 1);
+        const logoScale = interpolate(0.9, 1.05, progress, Easing.linear);
+        finalLogo.style.transform = `scale(${logoScale})`;
+      }
+    };
+  </script>
+</body>
+</html>

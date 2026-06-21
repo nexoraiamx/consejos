@@ -230,21 +230,21 @@ async function ExploreContent() {
       slug: communities.slug,
       avatarUrl: communities.avatarUrl,
       count: sql<number>`(
-        select count(*)::int from ${posts} where ${posts.communityId} = ${communities.id} and ${posts.deletedAt} is null
+        select count(*)::int from "posts" where "posts"."community_id" = "communities"."id" and "posts"."deleted_at" is null
       ) + (
-        select count(*)::int from ${comments} 
-        inner join ${posts} on ${comments.postId} = ${posts.id} 
-        where ${posts.communityId} = ${communities.id} and ${comments.deletedAt} is null
+        select count(*)::int from "comments" 
+        inner join "posts" on "comments"."post_id" = "posts"."id" 
+        where "posts"."community_id" = "communities"."id" and "comments"."deleted_at" is null
       )`
     })
     .from(communities)
     .where(isNull(communities.deletedAt))
     .orderBy(desc(sql`(
-        select count(*)::int from ${posts} where ${posts.communityId} = ${communities.id} and ${posts.deletedAt} is null
+        select count(*)::int from "posts" where "posts"."community_id" = "communities"."id" and "posts"."deleted_at" is null
       ) + (
-        select count(*)::int from ${comments} 
-        inner join ${posts} on ${comments.postId} = ${posts.id} 
-        where ${posts.communityId} = ${communities.id} and ${comments.deletedAt} is null
+        select count(*)::int from "comments" 
+        inner join "posts" on "comments"."post_id" = "posts"."id" 
+        where "posts"."community_id" = "communities"."id" and "comments"."deleted_at" is null
       )`
     ))
     .limit(5);
